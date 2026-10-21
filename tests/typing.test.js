@@ -3,6 +3,23 @@ import assert from 'node:assert/strict';
 import { createSession, enterKey, generateText, keyGuide, metrics, tick, weakKeys } from '../src/typing.js';
 import { DEFAULT_SETTINGS, emptyProgress, readProgress, validateProgress, writeProgress } from '../src/storage.js';
 
+test('Typedo loads legacy progress and saves under its new name', () => {
+  const legacy = emptyProgress();
+  legacy.settings.goal = 10;
+  const data = new Map([['keysteady:v1', JSON.stringify(legacy)]]);
+  const storage = { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
+  const loaded = readProgress(storage);
+  assert.equal(loaded.warning, '');
+  assert.equal(loaded.progress.settings.goal, 10);
+  assert.equal(writeProgress(storage, loaded.progress), '');
+  assert.equal(JSON.parse(data.get('typedo:v1')).settings.goal, 10);
+  const current = emptyProgress();
+  current.settings.goal = 3;
+  writeProgress(storage, current);
+  assert.equal(readProgress(storage).progress.settings.goal, 3);
+  assert.ok(data.has('keysteady:v1'));
+});
+
 test('WPM uses correct characters and five-character words', () => {
   const session = { ...createSession('a'.repeat(150)), typed: 'a'.repeat(150), attempts: 160, correctAttempts: 150, elapsed: 30000 };
   assert.equal(metrics(session).wpm, 60);
