@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { LESSON_COURSE, applyLessonResult, lessonTestPassed, sanitizeLessonProgress } from '../src/lessons.js';
+import { LESSON_COURSE, applyLessonResult, generateLessonText, lessonTestPassed, sanitizeLessonProgress } from '../src/lessons.js';
 import { createSession, metrics } from '../src/typing.js';
 import { emptyProgress, readProgress, validateProgress, writeProgress } from '../src/storage.js';
 
@@ -10,6 +10,46 @@ const result = (patch = {}) => ({
   stage: 'test', label: 'First lesson test', category: `lesson:${lessonId}:test`,
   elapsed: 60000, wpm: 20, raw: 20, accuracy: 100, errors: 0, correct: 100,
   passed: true, ...patch,
+});
+
+test('the first lesson starts with short real words on the home row', () => {
+  const first = LESSON_COURSE[0];
+  assert.equal(first.id, 'find-home', 'Saved lesson progress keeps its original identity');
+  assert.equal(first.practice, 'a lad asks dad');
+  for (const text of [...first.practiceVariants, ...first.testVariants]) {
+    assert.match(text, /^[asdfjkl ]+$/);
+    assert.doesNotMatch(text, /\b(fj|jf|fff|jjj)\b/);
+  }
+});
+
+test('lesson passages introduce reaches and punctuation in the advertised order', () => {
+  const allowed = [
+    /^[asdfjkl ]+$/, /^[asdfjkl; ]+$/, /^[asdfghjkl; ]+$/,
+    /^[qwertyuiopasdfghjkl; ]+$/, /^[a-z ]+$/, /^[A-Za-z ]+$/,
+    /^[A-Za-z0-9 ]+$/, /^[\x20-\x7e]+$/,
+  ];
+  for (const [index, lesson] of LESSON_COURSE.entries()) {
+    for (const text of [...lesson.practiceVariants, ...lesson.testVariants]) {
+      assert.match(text, allowed[index], `${lesson.id} should only require keys introduced so far`);
+      assert.doesNotMatch(text, /(\w)\1\1/, `${lesson.id} should use words instead of repeated key drills`);
+      assert.ok(text.split(' ').length >= 3, `${lesson.id} should offer a short phrase to type`);
+    }
+  }
+});
+
+test('each lesson offers fresh practice and test passages without changing the string API', () => {
+  for (const lesson of LESSON_COURSE) {
+    for (const stage of ['practice', 'test']) {
+      const variants = lesson[`${stage}Variants`];
+      assert.ok(new Set(variants).size >= 3);
+      assert.equal(lesson[stage], variants[0]);
+      assert.equal(generateLessonText(lesson.id, stage, () => 0), lesson[stage]);
+      assert.notEqual(generateLessonText(lesson.id, stage, () => 0.99), lesson[stage]);
+      assert.notEqual(generateLessonText(lesson.id, stage, () => 0, lesson[stage]), lesson[stage], 'A retry can exclude the passage just completed');
+    }
+    assert.notEqual(lesson.practice, lesson.test);
+  }
+  assert.equal(generateLessonText('missing', 'practice', () => 0), LESSON_COURSE[0].practice);
 });
 
 test('a lesson passes only when attempt accuracy and final text each reach 95%', () => {

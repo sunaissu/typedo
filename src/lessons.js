@@ -1,69 +1,76 @@
 export const LESSON_COURSE = [
   {
-    id: 'find-home', title: 'F + J', subtitle: 'Index fingers and space', keys: 'F J space',
-    focus: 'Your index fingers',
-    instruction: 'Feel the small bumps on F and J. Rest your left index on F and your right index on J. Use either thumb for the space bar. Keep your eyes on the text.',
+    id: 'find-home', title: 'First words', subtitle: 'Find home, then type', keys: 'F J + home row',
+    focus: 'Find F and J, then follow the fingers',
+    instruction: 'Feel the bumps on F and J and rest your index fingers there. Your other fingers rest on A S D and K L ;. Follow the highlighted finger to type your first words. Use either thumb for spaces.',
     fingers: ['F · left index', 'J · right index', 'Space · either thumb'],
-    practice: 'fff jjj fff jjj fj fj jf jf ff jj fjf jfj ff jj fj jf',
-    test: 'fj jf ff jj fjf jfj fff jjj jf fj jj ff jfj fjf fj jf',
+    practiceVariants: ['a lad asks dad', 'dad adds a flask', 'a sad lad falls'],
+    testVariants: ['a sad lad asks dad as a flask falls', 'dad asks a lad as a lad adds a flask', 'a lad adds a flask as dad asks a lad'],
   },
   {
     id: 'home-row', title: 'Home row', subtitle: 'A key for every finger', keys: 'A S D F J K L ;',
     focus: 'The home row',
     instruction: 'Place your left pinky, ring, middle and index on A S D F. Place your right index, middle, ring and pinky on J K L ;. Let each finger press its own key, then return to this resting position.',
     fingers: ['Left · A S D F', 'Right · J K L ;', 'Space · either thumb'],
-    practice: 'asdf jkl; asdf jkl; aa ss dd ff jj kk ll ;; sad dad lad ask fall flask',
-    test: 'a lad asks dad; dad asks a lad; a sad flask falls; a lad adds a flask',
+    practiceVariants: ['a flask falls as a lad asks dad', 'dad asks a sad lad as a flask falls', 'a lad adds a flask as dad adds a flask'],
+    testVariants: ['a sad lad asks dad as a lad adds a flask', 'dad asks a sad lad as a flask falls', 'a lad adds a flask as dad asks a sad lad'],
   },
   {
     id: 'center-reach', title: 'G + H', subtitle: 'Index finger reaches', keys: 'G H + home row',
     focus: 'Small index-finger reaches',
     instruction: 'Your left index reaches from F to G. Your right index reaches from J to H. Move only as far as you need, and return to F and J after each reach.',
     fingers: ['F → G · left index', 'J → H · right index', 'Keep other fingers at home'],
-    practice: 'fgf jhj fgf jhj gh hg glad glass dash half hall flag shall flash',
-    test: 'a glad lad has a glass; a flag shall flash; dad adds half a glass',
+    practiceVariants: ['a glad lad has a flag', 'dad adds half a glass', 'a lad has a salad'],
+    testVariants: ['dad has half a glass as a glad lad adds a dash', 'a lad has a salad as dad adds half a glass', 'a glad lad has a flag as dad adds a dash'],
   },
   {
     id: 'top-row', title: 'Top row', subtitle: 'Upper alphabet keys', keys: 'Q W E R T Y U I O P',
     focus: 'The top row',
     instruction: 'Reach up from home: left pinky Q, ring W, middle E, index R and T. On the right, use index Y and U, middle I, ring O, pinky P. Return to the home row between reaches.',
     fingers: ['Left · Q / W / E / R T', 'Right · Y U / I / O / P', 'Reach up, return home'],
-    practice: 'aqa sws ded frf ftf jyj juj kik lol ;p; quiet type write your tower',
-    test: 'we type with quiet purpose; your ideas guide the way; a little effort feels great',
+    practiceVariants: ['we share a quiet story', 'the yellow kite flies high', 'your tea is ready'],
+    testVariants: ['the sky is quiet today as we write a short story', 'we share a little tea as the yellow kite flies high', 'your dog is asleep as we read a story together'],
   },
   {
     id: 'bottom-row', title: 'Bottom row', subtitle: 'Complete the alphabet', keys: 'Z X C V B N M',
     focus: 'The bottom row',
     instruction: 'Reach down: left pinky Z, ring X, middle C, index V and B. Your right index handles N and M. Keep your wrists relaxed and return your fingers to home after each reach.',
     fingers: ['Left · Z / X / C / V B', 'Right index · N M', 'Keep your wrists relaxed'],
-    practice: 'aza sxs dcd fvf fbf jnj jmj zinc next calm move brave novel box',
-    test: 'move with care; brave minds can mix new ideas; a quick brown fox jumps over the lazy dog',
+    practiceVariants: ['the next bus comes at noon', 'mix the cake in a big bowl', 'my bike has a new bell'],
+    testVariants: ['the fox naps by the box as a lazy cat climbs a tree', 'we bring a warm cup of milk and move the blue chair', 'my new bike has a bell and a small basket for lunch'],
   },
   {
     id: 'capitals', title: 'Capitals + Shift', subtitle: 'Use the opposite hand', keys: 'Shift + A–Z',
     focus: 'Opposite-hand Shift',
     instruction: 'Hold Shift with the pinky on the opposite hand to the letter. For A, hold right Shift; for J, hold left Shift. Release Shift after the capital, and keep both hands close to home.',
     fingers: ['Left-hand letter · right Shift', 'Right-hand letter · left Shift', 'Release Shift after each capital'],
-    practice: 'Aa Jj Ff Kk Ss Ll Dd Hh We You Calm Mind Blue Sky Quiet Focus',
-    test: 'Find The Key And Return Home Keep Your Hands Relaxed A Small Step Today Builds A Better Habit Tomorrow',
+    practiceVariants: ['Mia and Ben visit Lake Park', 'June takes the Blue Line home', 'Sam meets Jo on Friday'],
+    testVariants: ['On Monday Mia and Ben take the Blue Line to West Park', 'June and Sam meet Jo at Lake Park on Friday', 'Ben sends Mia a note about their trip to New York'],
   },
   {
     id: 'numbers', title: 'Number row', subtitle: 'Digits without looking', keys: '1 2 3 4 5 6 7 8 9 0',
     focus: 'The number row',
     instruction: 'Use left pinky for 1, ring for 2, middle for 3, and index for 4 and 5. Use right index for 6 and 7, middle for 8, ring for 9, and pinky for 0. Reach up gently and return home.',
     fingers: ['Left · 1 / 2 / 3 / 4 5', 'Right · 6 7 / 8 / 9 / 0', 'Slow down for a longer reach'],
-    practice: 'a1a s2s d3d f4f f5f j6j j7j k8k l9l ;0; 12 34 56 78 90 2026',
-    test: 'Type 10 words in 30 seconds Try 5 sets of 24 keys Room 678 opens at 9 Order 12345 is ready',
+    practiceVariants: ['Room 12 is ready for 3 guests', 'Buy 4 apples and 5 pears for 6 people', 'Bus 78 leaves at 9 and returns at 10'],
+    testVariants: ['Order 12345 has 6 items and costs 78 dollars plus 90 cents', 'Room 204 has 3 chairs and 5 cups for our 6 guests at 7', 'Take bus 89 to gate 10 and meet 2 friends at room 34567'],
   },
   {
     id: 'punctuation', title: 'Punctuation', subtitle: 'Write complete sentences', keys: ', . ; : ? ! " \'',
     focus: 'Everyday punctuation',
     instruction: 'Use right middle for comma, right ring for period, and right pinky for semicolon, apostrophe and slash. Add left Shift for : and ?. Use right Shift with left pinky on 1 for !.',
     fingers: [', · right middle', '. · right ring', '; \' / · right pinky', 'Shift · opposite hand'],
-    practice: 'k,k l.l ;:; \'"\' /?/ 1!1 yes, no. Let\'s try: "One more!" Ready?',
-    test: '"Ready?" she asks. Yes, let\'s begin! Take 3 slow breaths; find F and J. Focus: accuracy first, speed later.',
+    practiceVariants: ['"Ready?" she asks. "Let\'s go!"', 'Tea, toast, and jam. That\'s breakfast!', 'A note: "I\'m outside; bring a coat."'],
+    testVariants: ['"Ready?" she asks. Yes, let\'s go! Bring a coat; it might rain. Next stop: the park.', 'Mia asks, "What\'s for lunch?" Ben smiles: "Soup!" It\'s hot; take a small sip.', '"Wait!" Jo calls. "Is this yours?" Yes, that\'s my bag; thanks. Inside: a book and lunch.'],
   },
-];
+].map(lesson => ({ ...lesson, practice: lesson.practiceVariants[0], test: lesson.testVariants[0] }));
+
+export function generateLessonText(lessonId, stage = 'practice', random = Math.random, previousText = '') {
+  const lesson = LESSON_COURSE.find(item => item.id === lessonId) || LESSON_COURSE[0];
+  const variants = stage === 'test' ? lesson.testVariants : lesson.practiceVariants;
+  const available = variants.filter(text => text !== previousText);
+  return available[Math.floor(random() * available.length) % available.length];
+}
 
 const bounded = (value, max) => typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(value, max)) : 0;
 

@@ -94,6 +94,30 @@ test('word counts, custom text and empty weak-key lessons stay usable', () => {
   assert.ok(generateText({ ...DEFAULT_SETTINGS, mode: 'practice', lesson: 'weak' }, {}).length > 10);
 });
 
+test('row practice uses varied phrases while keeping the intended keys', () => {
+  const rows = { home: /^[asdfghjkl; ]+$/, top: /^[qwertyuiopasdfghjkl; ]+$/, bottom: /^[a-z ]+$/, all: /^[a-z ]+$/ };
+  for (const [lesson, allowed] of Object.entries(rows)) {
+    const config = { ...DEFAULT_SETTINGS, mode: 'practice', lesson };
+    const first = generateText(config, {}, () => 0);
+    const next = generateText(config, {}, () => 0.8);
+    assert.match(first, allowed);
+    assert.match(next, allowed);
+    assert.notEqual(first, next, 'A fresh practice round should draw from different phrases');
+    assert.doesNotMatch(first, /(\w)\1\1/);
+    assert.ok(first.split(' ').length >= 10);
+  }
+});
+
+test('weak-key practice uses readable phrases for every letter and supported punctuation', () => {
+  for (const key of 'abcdefghijklmnopqrstuvwxyz;,.') {
+    const text = generateText({ ...DEFAULT_SETTINGS, mode: 'practice', lesson: 'weak' }, { [key]: { attempts: 4, errors: 3 } }, () => 0);
+    assert.ok(text.toLowerCase().includes(key), `Practice should include the weak key ${key}`);
+    assert.match(text, /^[\x20-\x7e]+$/);
+    assert.ok(text.split(' ').length >= 10, 'Weak keys should appear in phrases with real words');
+    assert.doesNotMatch(text, /(\w)\1\1/, 'Weak keys should not turn into repeated-letter drills');
+  }
+});
+
 test('finger mapping includes opposite-hand shift and punctuation', () => {
   assert.equal(keyGuide('f').finger.id, 'li');
   assert.equal(keyGuide('j').finger.id, 'ri');

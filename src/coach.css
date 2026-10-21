@@ -1,0 +1,109 @@
+.guidance-choice { display:flex; align-items:center; gap:13px; margin:0 0 13px; }
+.app-shell .intro { margin-bottom:18px; }
+.app-shell .session-setup { padding:11px 16px 13px; }
+.app-shell .setup-heading { margin-bottom:9px; }
+.guidance-choice > span { font:9px var(--mono); letter-spacing:1.1px; color:var(--subtle); }
+.guidance-choice > div { display:flex; gap:3px; padding:3px; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; }
+.guidance-choice button { padding:7px 10px; font-size:11px; color:var(--muted); border-radius:5px; }
+.guidance-choice button[aria-pressed=true] { color:var(--accent); background:var(--surface); box-shadow:0 1px 4px #0001; }
+.guidance-choice small { font-size:10px; color:var(--subtle); }
+.coached-workspace { display:grid; grid-template-columns:minmax(0,1fr) 310px; align-items:stretch; }
+.coached-workspace > .typing-surface, .coached-workspace > .lesson-type-surface { min-width:0; align-self:center; }
+.typing-coach { padding:18px 20px 15px; border-left:1px solid var(--border); background:color-mix(in srgb,var(--accent) 4%,var(--surface)); }
+.coach-heading { display:flex; align-items:center; gap:7px; font:9px var(--mono); letter-spacing:1.2px; color:var(--accent); }
+.coach-cue { display:flex; align-items:center; gap:12px; margin:13px 0 4px; min-height:48px; }
+.coach-cue > kbd { display:grid; place-items:center; min-width:48px; height:48px; padding:5px 8px; background:var(--accent-light); color:var(--text); border-color:var(--accent); font:500 25px var(--mono); }
+.coach-cue > kbd:first-child { text-transform:none; }
+.coach-cue strong { display:block; font-size:14px; font-weight:550; color:var(--text); }
+.coach-cue span { display:block; margin-top:5px; font-size:10px; line-height:1.5; color:var(--muted); }
+.coach-hands { display:flex; justify-content:center; gap:0; margin:7px -5px 0; }
+.coach-hand { width:50%; max-width:150px; height:auto; overflow:visible; }
+.coach-palm { fill:var(--surface-2); stroke:var(--subtle); stroke-opacity:.6; stroke-width:1.3; }
+.coach-digit rect { fill:var(--surface-2); stroke:var(--subtle); stroke-opacity:.7; stroke-width:1.3; }
+.coach-digit text { font:10px var(--mono); fill:var(--muted); text-anchor:middle; }
+.coach-digit.active rect { fill:var(--digit-color); stroke:var(--text); stroke-opacity:1; stroke-width:2; }
+.coach-digit.active text { fill:#07101d; font-weight:500; }
+.coach-digit.shift-active rect { fill:var(--accent-light); stroke:var(--accent); stroke-opacity:1; stroke-width:2; stroke-dasharray:3 2; }
+.coach-active-dot { fill:#07101d; }
+.coach-hand-label { fill:var(--subtle); font:8px var(--mono); letter-spacing:1px; text-anchor:middle; }
+.coach-home { margin-top:13px; text-align:center; font-size:9px; line-height:1.7; color:var(--subtle); }
+.coach-home kbd { font-size:9px; padding:1px 4px; }
+.word-progress { display:flex; align-items:center; gap:12px; padding:12px 26px; border-top:1px solid var(--border); color:var(--muted); font:10px var(--mono); }
+.word-progress > span { white-space:nowrap; }
+.word-progress strong { color:var(--accent); }
+.word-progress-track { height:4px; flex:1; min-width:30px; background:var(--border); border-radius:4px; overflow:hidden; }
+.word-progress-track i { display:block; height:100%; background:var(--accent); transition:width .1s; }
+.word-progress small { font:10px 'DM Sans',sans-serif; color:var(--subtle); }
+.keyboard-reference { margin-top:13px; }
+.keyboard-reference > summary { cursor:pointer; width:fit-content; color:var(--muted); font-size:11px; padding:7px 0; }
+.keyboard-reference > .guide-card { margin-top:10px; }
+.app-shell .keyboard-reference .guide-body { display:block; }
+.keyboard-reference .finger-coach { display:none; }
+.keyboard-reference .guide-note { display:none; }
+.app-shell.focus-mode .keyboard-reference { display:none; }
+.app-shell .coached-workspace .words-window { height:178px; }
+.app-shell .coached-workspace .words-text { font-size:26px; line-height:1.9; }
+.app-shell .coached-workspace .typing-surface { padding:20px 26px; min-height:218px; }
+.lesson-help { margin:16px 0; border-bottom:1px solid var(--border); padding-bottom:16px; color:var(--muted); }
+.lesson-help > summary { cursor:pointer; font-size:11px; }
+.lesson-help p { font-size:12px; line-height:1.8; margin-top:12px; max-width:750px; }
+.lesson-help .lesson-finger-tips { margin-top:10px; }
+.lesson-workspace .guidance-choice { margin-bottom:13px; }
+.lesson-workspace-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:17px; }
+.lesson-workspace-heading h2 { font-size:24px; font-weight:500; letter-spacing:-.7px; margin-top:6px; }
+.lesson-workspace-heading > p { font-size:11px; color:var(--muted); }
+.app-shell .lesson-intro { margin-bottom:19px; }
+.app-shell .lesson-back { margin-bottom:12px; }
+.app-shell .lesson-intro h1 { font-size:29px; }
+.app-shell .lesson-intro > div > p { font-size:11px; }
+.app-shell .course-summary { margin-top:0; }
+.app-shell .lesson-course { position:relative; display:flex; gap:6px; overflow-x:auto; padding-bottom:8px; margin-bottom:16px; }
+.app-shell .lesson-course-card { flex:1 0 105px; padding:10px; border-radius:7px; }
+.app-shell .lesson-card-top { margin-bottom:7px; }
+.app-shell .lesson-course-card > strong { font-size:11px; }
+.app-shell .lesson-card-keys, .app-shell .lesson-card-status { display:none; }
+.app-shell .lesson-workspace { padding-top:18px; }
+.app-shell .lesson-stage-explanation { font-size:9px; }
+.app-shell .lesson-type-surface { min-height:218px; }
+.app-shell .lesson-run-footer { margin-bottom:12px; }
+@media(max-width:1180px) {
+  .coached-workspace { grid-template-columns:minmax(0,1fr) 275px; }
+  .typing-coach { padding:17px 16px 14px; }
+  .coach-cue strong { font-size:13px; }
+  .app-shell .coached-workspace .words-text { font-size:23px; }
+  .app-shell .coached-workspace .typing-surface { padding:18px 21px; }
+}
+@media(max-width:700px) {
+  .coached-workspace { display:flex; flex-direction:column; }
+  .typing-coach { order:-1; border-left:0; border-bottom:1px solid var(--border); display:grid; grid-template-columns:minmax(0,1fr) 170px; gap:3px 8px; padding:13px 17px; }
+  .coach-heading { font-size:8px; align-self:end; }
+  .coach-cue { margin:5px 0 0; align-self:start; gap:9px; }
+  .coach-cue > kbd { min-width:38px; height:40px; font-size:21px; }
+  .coach-cue strong { font-size:12px; }
+  .coach-cue span { font-size:9px; }
+  .coach-hands { grid-column:2; grid-row:1 / 3; margin:0; align-self:center; }
+  .coach-hand { max-width:85px; }
+  .coach-home { display:none; }
+  .coached-workspace > .typing-surface, .coached-workspace > .lesson-type-surface { width:100%; }
+  .app-shell .coached-workspace .words-window { height:127px; }
+  .app-shell .coached-workspace .typing-surface, .app-shell .coached-workspace .lesson-type-surface { min-height:163px; padding:15px 18px; }
+  .app-shell .coached-workspace .words-text { font-size:23px; }
+  .guidance-choice { flex-wrap:wrap; gap:7px 10px; }
+  .guidance-choice > span { display:none; }
+  .guidance-choice small { font-size:9px; }
+  .word-progress { padding:12px 18px; }
+  .word-progress small { display:none; }
+  .app-shell .lesson-intro { flex-direction:row; gap:10px; align-items:center; }
+  .app-shell .course-summary { min-width:0; }
+  .app-shell .course-ring, .app-shell .course-summary p, .app-shell .course-mini-track { display:none; }
+  .app-shell .course-summary strong { font-size:15px; text-align:right; display:block; }
+  .app-shell .course-summary strong span { display:block; font-size:9px; margin-top:4px; }
+  .app-shell .lesson-intro h1 { font-size:27px; }
+  .lesson-workspace-heading { align-items:flex-start; }
+  .lesson-workspace-heading > p { max-width:120px; text-align:right; font-size:10px; line-height:1.6; }
+  .app-shell .lesson-stage-bar { flex-direction:row; flex-wrap:wrap; gap:8px; }
+  .app-shell .lesson-stage-tabs { width:auto; }
+  .app-shell .lesson-stage-explanation { font-size:9px; }
+}
+@media(max-width:380px) { .typing-coach { grid-template-columns:minmax(0,1fr) 140px; padding:12px; } .coach-hand { max-width:70px; } .coach-cue { gap:7px; } .coach-cue strong { font-size:11px; } }
+@media(prefers-reduced-motion:reduce) { .word-progress-track i { transition:none; } }

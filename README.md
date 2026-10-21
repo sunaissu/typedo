@@ -23,10 +23,11 @@ npm run preview
 
 - Timed tests: 15, 30, 60, or 120 seconds. Word tests: 10, 25, 50, or 100 words.
 - Optional punctuation and numbers, custom passages up to 1,500 characters, repeat-text and new-text restarts.
-- Home-row, top-row, bottom-row, full-keyboard, and weak-key practice. Row lessons mix drills with words that emphasize the selected row.
-- A dedicated Lessons area with eight steps: F/J, home row, G/H reaches, top row, bottom row, capitals and Shift, numbers, and punctuation. Each lesson explains finger placement and offers a guided drill plus a separate test without the guide.
+- Home-row, top-row, bottom-row, full-keyboard, and weak-key practice use short phrases. Weak-key practice puts difficult letters into real words.
+- A dedicated Lessons area with eight steps: first words, home row, G/H reaches, top row, bottom row, capitals and Shift, numbers, and punctuation. Each lesson has three practice passages and three test passages. Retrying always picks a different passage.
 - Lesson tests require at least 95% attempt accuracy and 95% correct final text. There is no speed requirement. Completed drills, passed tests, and best scores persist locally and are included in backups.
-- Live key and finger highlights, opposite-hand Shift guidance, and optional strict practice that waits for the correct key.
+- Beginner mode keeps large hands and the next finger beside the typing prompt, including in focus mode. Independent mode hides the hands without restarting, and the choice is remembered across typing and lessons. The full keyboard map is available below the typing area.
+- Live key and finger highlights, opposite-hand Shift guidance, optional strict practice, and progress measured in completed correct words.
 - WPM, raw WPM, accuracy, mistakes, a speed chart, session history, weak-key stats, daily goals, and streaks.
 - A dark blue theme by default, a light blue alternative, focus mode, optional synthesized key sounds, and reduced-motion support. The theme switch updates the full page background as well as the controls.
 - JSON progress export and restore. Restore keeps existing results, skips duplicate session IDs, and takes the larger per-key totals to avoid double counting overlapping backups. Settings and custom text are restored from the backup.

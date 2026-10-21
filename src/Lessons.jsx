@@ -1,24 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, BookOpen, Check, CheckCircle2, Circle, Clock3, Hand, Keyboard as KeyboardIcon, RotateCcw, Target, Trophy } from 'lucide-react';
 import Keyboard from './Keyboard.jsx';
+import TypingCoach, { GuidanceChoice, WordProgress } from './TypingCoach.jsx';
 import { createSession, enterKey, metrics, tick } from './typing.js';
-import { LESSON_COURSE, lessonTestPassed, sanitizeLessonProgress } from './lessons.js';
+import { LESSON_COURSE, generateLessonText, lessonTestPassed, sanitizeLessonProgress } from './lessons.js';
 import './lessons.css';
 
 const configs = { practice: { mode: 'practice', strict: true }, test: { mode: 'custom' } };
 const timeLabel = elapsed => `${Math.floor(elapsed / 60000)}:${String(Math.floor(elapsed / 1000) % 60).padStart(2, '0')}`;
 
-export default function Lessons({ lessonProgress = {}, onComplete, onBack }) {
+export default function Lessons({ lessonProgress = {}, guideEnabled, onGuideChange, onComplete, onBack }) {
   const progress = sanitizeLessonProgress(lessonProgress);
   const [lessonId, setLessonId] = useState(() => LESSON_COURSE.find(lesson => !progress[lesson.id]?.passed)?.id || LESSON_COURSE[0].id);
   const [stage, setStage] = useState('practice');
   const lessonIndex = LESSON_COURSE.findIndex(item => item.id === lessonId);
   const lesson = LESSON_COURSE[lessonIndex];
-  const [session, setSession] = useState(() => createSession(lesson.practice));
+  const [session, setSession] = useState(() => createSession(generateLessonText(lesson.id, 'practice')));
   const [focused, setFocused] = useState(false);
-  const [showGuide, setShowGuide] = useState(true);
+  const [localGuide, setLocalGuide] = useState(true);
+  const showGuide = guideEnabled ?? localGuide;
+  const setShowGuide = value => { setLocalGuide(value); onGuideChange?.(value); requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true })); };
   const [inputNote, setInputNote] = useState('');
   const inputRef = useRef(null);
+  const courseRef = useRef(null);
   const resetRef = useRef(null);
   const caretRef = useRef(null);
   const viewportRef = useRef(null);
@@ -27,6 +31,12 @@ export default function Lessons({ lessonProgress = {}, onComplete, onBack }) {
   const runRef = useRef({ lesson, stage });
   const completeRef = useRef(onComplete);
   completeRef.current = onComplete;
+
+  useEffect(() => {
+    const course = courseRef.current;
+    const selected = course?.querySelector('[aria-current="step"]');
+    if (selected) course.scrollLeft = Math.max(0, selected.offsetLeft - (course.clientWidth - selected.clientWidth) / 2);
+  }, [lessonId]);
 
   function updateSession(next) {
     sessionRef.current = next;
@@ -37,7 +47,7 @@ export default function Lessons({ lessonProgress = {}, onComplete, onBack }) {
     completeRef.current?.({
       id: crypto.randomUUID(), date: new Date().toISOString(), mode: 'lesson',
       lessonId: run.lesson.id, stage: run.stage,
-      label: `${run.lesson.title} · ${run.stage === 'practice' ? 'drill' : 'test'}`,
+      label: `${run.lesson.title} · ${run.stage === 'practice' ? 'word practice' : 'test'}`,
       category: `lesson:${run.lesson.id}:${run.stage}`, elapsed: next.elapsed,
       ...metrics(next), keyStats: next.keyStats,
       passed: run.stage === 'test' && lessonTestPassed(next),
@@ -62,13 +72,12 @@ export default function Lessons({ lessonProgress = {}, onComplete, onBack }) {
   function start(nextLesson = lesson, nextStage = stage, focus = true) {
     runRef.current = { lesson: nextLesson, stage: nextStage };
     recordedRef.current = false;
-    const next = createSession(nextLesson[nextStage]);
+    const next = createSession(generateLessonText(nextLesson.id, nextStage, Math.random, sessionRef.current.text));
     sessionRef.current = next;
     setSession(next);
     setLessonId(nextLesson.id);
     setStage(nextStage);
     setInputNote('');
-    setShowGuide(true);
     if (viewportRef.current) viewportRef.current.scrollTop = 0;
     if (focus) requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
   }
@@ -107,34 +116,32 @@ export default function Lessons({ lessonProgress = {}, onComplete, onBack }) {
 
   return <div className="lessons-page" onKeyDown={handleShortcuts}>
     <section className="lesson-intro">
-      <div><button className="text-button lesson-back" onClick={onBack}><ArrowLeft size={14} />Back to free typing</button><div className="eyebrow"><span />TOUCH TYPING / QWERTY</div><h1>Lessons<span>.</span></h1><p>Eight lessons. Practice with the guide, then test without it.</p></div>
-      <div className="course-summary"><div className="course-ring" style={{ '--course-fill': `${passedCount / LESSON_COURSE.length * 360}deg` }}><BookOpen size={21} /></div><div><strong>{passedCount} <span>/ {LESSON_COURSE.length} lessons passed</span></strong><p>{practicedCount} drills completed · go at your own pace</p><div className="course-mini-track" aria-label={`${passedCount} of ${LESSON_COURSE.length} lessons passed`}>{LESSON_COURSE.map(item => <i key={item.id} className={progress[item.id]?.passed ? 'complete' : ''} />)}</div></div></div>
+      <div><button className="text-button lesson-back" onClick={onBack}><ArrowLeft size={14} />Back to free typing</button><div className="eyebrow"><span />TOUCH TYPING / QWERTY</div><h1>Lessons<span>.</span></h1><p>Start with a few words. Add new keys as you go.</p></div>
+      <div className="course-summary"><div className="course-ring" style={{ '--course-fill': `${passedCount / LESSON_COURSE.length * 360}deg` }}><BookOpen size={21} /></div><div><strong>{passedCount} <span>/ {LESSON_COURSE.length} lessons passed</span></strong><p>{practicedCount} practices completed · go at your own pace</p><div className="course-mini-track" aria-label={`${passedCount} of ${LESSON_COURSE.length} lessons passed`}>{LESSON_COURSE.map(item => <i key={item.id} className={progress[item.id]?.passed ? 'complete' : ''} />)}</div></div></div>
     </section>
 
-    <nav className="lesson-course" aria-label="Choose a typing lesson">{LESSON_COURSE.map((item, index) => {
+    <nav ref={courseRef} className="lesson-course" aria-label="Choose a typing lesson">{LESSON_COURSE.map((item, index) => {
       const record = progress[item.id];
       const selected = item.id === lessonId;
       return <button key={item.id} className={`lesson-course-card ${selected ? 'selected' : ''} ${record?.passed ? 'passed' : ''}`} aria-current={selected ? 'step' : undefined} onClick={() => start(item, 'practice', false)}>
         <span className="lesson-card-top"><span className="lesson-number">{String(index + 1).padStart(2, '0')}</span>{record?.passed ? <CheckCircle2 size={15} /> : selected ? <span className="lesson-current-dot" /> : <Circle size={13} />}</span>
-        <strong>{item.title}</strong><span className="lesson-card-keys">{item.keys}</span><span className="lesson-card-status">{record?.passed ? 'Test passed' : record?.practiced ? 'Drill done · try the test' : item.subtitle}</span>
+        <strong>{item.title}</strong><span className="lesson-card-keys">{item.keys}</span><span className="lesson-card-status">{record?.passed ? 'Test passed' : record?.practiced ? 'Practice done · try the test' : item.subtitle}</span>
       </button>;
     })}</nav>
 
     <section className="lesson-workspace" aria-labelledby="lesson-title">
-      <div className="lesson-details">
-        <div className="lesson-detail-copy"><div className="lesson-overline">LESSON {String(lessonIndex + 1).padStart(2, '0')} <span>/</span> {lesson.focus}</div><h2 id="lesson-title">{lesson.title}</h2><p>{lesson.instruction}</p><div className="lesson-finger-tips">{lesson.fingers.map(tip => <span key={tip}>{tip}</span>)}</div></div>
-        <div className="lesson-pass-note"><Target size={19} /><strong>Accuracy first.</strong><p>Pass with at least 95% accuracy and 95% of the final text correct. No speed requirement.</p><span>{currentProgress?.attempts ? `${currentProgress.attempts} completed runs · ${currentProgress.bestAccuracy}% best accuracy` : 'Every lesson is open. Start anywhere.'}</span></div>
-      </div>
+      <div className="lesson-workspace-heading"><div><div className="lesson-overline">LESSON {String(lessonIndex + 1).padStart(2, '0')} <span>/</span> {lesson.focus}</div><h2 id="lesson-title">{lesson.title}</h2></div><p>Real words. No time limit.</p></div>
 
-      <div className="lesson-stage-bar"><div className="lesson-stage-tabs" aria-label="Lesson stage"><button className={stage === 'practice' ? 'selected' : ''} aria-pressed={stage === 'practice'} onClick={() => start(lesson, 'practice')}><Hand size={15} /><span>1. Guided drill</span>{currentProgress?.practiced && <Check size={13} />}</button><button className={stage === 'test' ? 'selected' : ''} aria-pressed={stage === 'test'} onClick={() => start(lesson, 'test')}><Target size={15} /><span>2. Lesson test</span>{currentProgress?.passed && <Check size={13} />}</button></div><span className="lesson-stage-explanation">{stage === 'practice' ? 'Finger guide on · correct each key to continue' : 'Guide off · mistakes count · Backspace to correct'}</span></div>
+      <div className="lesson-stage-bar"><div className="lesson-stage-tabs" aria-label="Lesson stage"><button className={stage === 'practice' ? 'selected' : ''} aria-pressed={stage === 'practice'} onClick={() => start(lesson, 'practice')}><Hand size={15} /><span>1. Word practice</span>{currentProgress?.practiced && <Check size={13} />}</button><button className={stage === 'test' ? 'selected' : ''} aria-pressed={stage === 'test'} onClick={() => start(lesson, 'test')}><Target size={15} /><span>2. Lesson test</span>{currentProgress?.passed && <Check size={13} />}</button></div><span className="lesson-stage-explanation">{stage === 'practice' ? 'Real words. Correct each key to continue.' : 'Guide off · mistakes count · Backspace to correct'}</span></div>
 
+      {stage === 'practice' && <GuidanceChoice enabled={showGuide} onChange={setShowGuide} />}
       <div className={`lesson-typing-card ${focused ? 'is-focused' : ''} ${running ? 'running' : ''}`}>
-        <div className="lesson-typing-top"><span className="lesson-session-state"><i className={running ? 'running' : ''} />{done ? 'SESSION COMPLETE' : stage === 'practice' ? 'GUIDED DRILL' : 'LESSON TEST'}</span><div className="lesson-live-metrics"><span><strong>{stats.wpm}</strong> wpm</span><span><strong>{stats.accuracy}%</strong> accuracy</span><span><Clock3 size={13} />{timeLabel(session.elapsed)}</span></div></div>
+        <div className="lesson-typing-top"><span className="lesson-session-state"><i className={running ? 'running' : ''} />{done ? 'SESSION COMPLETE' : stage === 'practice' ? 'WORD PRACTICE' : 'LESSON TEST'}</span><div className="lesson-live-metrics"><span><strong>{stats.wpm}</strong> wpm</span><span><strong>{stats.accuracy}%</strong> accuracy</span><span><Clock3 size={13} />{timeLabel(session.elapsed)}</span></div></div>
         {done ? <div className="lesson-result" role="status">
           <div className={`lesson-result-icon ${stage === 'test' && !passed ? 'retry' : ''}`}>{stage === 'practice' ? <Hand size={25} /> : passed ? <Trophy size={25} /> : <Target size={25} />}</div>
-          <div className="lesson-result-copy"><h3>{stage === 'practice' ? 'Guided drill complete' : passed ? 'Lesson passed' : 'Keep practicing'}</h3><p>{stage === 'practice' ? 'The test uses a different passage and hides the finger guide.' : passed ? 'Your accuracy and final text both reached the goal.' : 'Reach 95% on both accuracy and final text to pass. There is no time limit.'}</p><div className="lesson-result-stats"><span><strong>{resultAccuracy}%</strong> accuracy</span><span><strong>{textCoverage}%</strong> text correct</span><span><strong>{stats.wpm}</strong> wpm</span><span><strong>{stats.errors}</strong> mistakes</span></div></div>
-          <div className="lesson-result-actions">{stage === 'practice' ? <button className="primary-button" onClick={() => start(lesson, 'test')}>Take lesson test<ArrowRight size={15} /></button> : passed && lessonIndex < LESSON_COURSE.length - 1 ? <button className="primary-button" onClick={() => start(LESSON_COURSE[lessonIndex + 1], 'practice')}>Next lesson<ArrowRight size={15} /></button> : passed ? <button className="primary-button" onClick={onBack}>Back to free typing<ArrowRight size={15} /></button> : <button className="primary-button" onClick={() => start()}>Try test again<RotateCcw size={15} /></button>}{stage === 'test' && !passed && <button className="text-button" onClick={() => start(lesson, 'practice')}>Return to guided drill</button>}</div>
-        </div> : <div className={`lesson-type-surface ${!focused && running ? 'unfocused' : ''}`} onClick={() => inputRef.current?.focus({ preventScroll: true })}>
+          <div className="lesson-result-copy"><h3>{stage === 'practice' ? 'Words complete' : passed ? 'Lesson passed' : 'Keep practicing'}</h3><p>{stage === 'practice' ? 'Ready for a new passage? Try the test without hints, or practice more words.' : passed ? 'Your accuracy and final text both reached the goal.' : 'Reach 95% on both accuracy and final text to pass. There is no time limit.'}</p><div className="lesson-result-stats"><span><strong>{resultAccuracy}%</strong> accuracy</span><span><strong>{textCoverage}%</strong> text correct</span><span><strong>{stats.wpm}</strong> wpm</span><span><strong>{stats.errors}</strong> mistakes</span></div></div>
+          <div className="lesson-result-actions">{stage === 'practice' ? <button className="primary-button" onClick={() => start(lesson, 'test')}>Take lesson test<ArrowRight size={15} /></button> : passed && lessonIndex < LESSON_COURSE.length - 1 ? <button className="primary-button" onClick={() => start(LESSON_COURSE[lessonIndex + 1], 'practice')}>Next lesson<ArrowRight size={15} /></button> : passed ? <button className="primary-button" onClick={onBack}>Back to free typing<ArrowRight size={15} /></button> : <button className="primary-button" onClick={() => start()}>Try test again<RotateCcw size={15} /></button>}{stage === 'practice' && <button className="text-button" onClick={() => start()}>More words<ArrowRight size={13} /></button>}{stage === 'test' && !passed && <button className="text-button" onClick={() => start(lesson, 'practice')}>Return to word practice</button>}</div>
+        </div> : <div className={stage === 'practice' && showGuide ? 'coached-workspace' : ''}><div className={`lesson-type-surface ${!focused && running ? 'unfocused' : ''}`} onClick={() => inputRef.current?.focus({ preventScroll: true })}>
           <div className="words-window lesson-words-window" ref={viewportRef} aria-hidden="true"><div className="words-text">{session.text.split(' ').map((word, wordIndex, words) => {
             const startIndex = characterOffset;
             characterOffset += word.length + 1;
@@ -145,15 +152,17 @@ export default function Lessons({ lessonProgress = {}, onComplete, onBack }) {
               return <span key={charIndex} ref={active ? caretRef : undefined} className={`char ${typed !== undefined ? typed === char ? 'correct' : 'incorrect' : ''} ${active ? 'current' : ''} ${active && session.lastWrong ? 'wrong-flash' : ''}`}>{char}</span>;
             })}</span>;
           })}</div></div>
-          <textarea ref={inputRef} className="typing-input" aria-label={`${lesson.title} ${stage === 'practice' ? 'guided drill' : 'test'} typing input`} aria-describedby="lesson-input-instructions lesson-accessible-prompt" value="" onChange={() => {}} onKeyDown={handleKey} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onPaste={event => { event.preventDefault(); setInputNote('Type each key yourself. Pasting is disabled.'); }} onDrop={event => event.preventDefault()} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} inputMode="none" />
+          <textarea ref={inputRef} className="typing-input" aria-label={`${lesson.title} ${stage === 'practice' ? 'word practice' : 'test'} typing input`} aria-describedby="lesson-input-instructions lesson-accessible-prompt" value="" onChange={() => {}} onKeyDown={handleKey} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onPaste={event => { event.preventDefault(); setInputNote('Type each key yourself. Pasting is disabled.'); }} onDrop={event => event.preventDefault()} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} inputMode="none" />
           <p className="sr-only" id="lesson-accessible-prompt">Text to type: {session.text}</p>
           {!focused && running && <div className="focus-prompt"><KeyboardIcon size={17} />Click the text to continue. The timer is still running.</div>}
-        </div>}
+        </div>{stage === 'practice' && showGuide && <TypingCoach next={session.text[session.typed.length]} />}</div>}
+        <WordProgress text={session.text} typed={session.typed} />
         <div className="lesson-typing-bottom"><span id="lesson-input-instructions" role={inputNote ? 'status' : undefined}>{inputNote || (done ? 'Completed runs count toward your daily practice.' : running ? `${session.typed.length} / ${session.text.length} characters${stage === 'practice' && session.lastWrong ? ' · try the highlighted key again' : ''}` : focused ? 'Start typing to begin. Accuracy before speed.' : 'Click the text to begin · use a physical keyboard')}</span><button className="lesson-reset" ref={resetRef} onClick={() => start()} title="Reset this run (Tab then Enter, or Ctrl/⌘+Enter within lessons)"><RotateCcw size={15} />Reset</button></div>
         <div className="lesson-progress-track"><i style={{ width: `${Math.min(100, session.typed.length / session.text.length * 100)}%` }} /></div>
       </div>
       <div className="lesson-run-footer"><span>{!done && <kbd>tab</kbd>}<kbd>enter</kbd> reset <i /><kbd>esc</kbd> reset {!done && <><i /><kbd>backspace</kbd> correct</>}</span>{stage === 'practice' && !showGuide && <button className="text-button" onClick={() => setShowGuide(true)}><KeyboardIcon size={14} />Show finger guide</button>}{stage === 'test' && <span><Target size={13} />95% goal · no time limit</span>}</div>
-      {stage === 'practice' && showGuide && <Keyboard next={session.text[session.typed.length]} running={running} finished={done} onHide={() => setShowGuide(false)} />}
+      {stage === 'practice' && showGuide && !done && <details className="keyboard-reference"><summary>Need the whole keyboard? Open key map</summary><Keyboard next={session.text[session.typed.length]} running={running} finished={done} /></details>}
+      <details className="lesson-help"><summary>Finger placement and lesson goal</summary><p>{lesson.instruction}</p><div className="lesson-finger-tips">{lesson.fingers.map(tip => <span key={tip}>{tip}</span>)}</div><p>Pass the test with at least 95% accuracy and 95% of the final text correct. There is no speed requirement.</p>{currentProgress?.attempts > 0 && <p>{currentProgress.attempts} completed runs · {currentProgress.bestAccuracy}% best accuracy</p>}</details>
       <p className="lesson-honest-note"><Hand size={14} />The guide shows which finger to use. A keyboard cannot detect which finger you actually press with.</p>
     </section>
   </div>;
