@@ -49,6 +49,28 @@
 .lesson-help p { font-size:12px; line-height:1.8; margin-top:12px; max-width:750px; }
 .lesson-help .lesson-finger-tips { margin-top:10px; }
 .lesson-workspace .guidance-choice { margin-bottom:13px; }
+.lesson-round-plan { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:13px; align-items:center; padding:11px 14px; margin-bottom:13px; border:1px solid var(--border); border-radius:8px; background:var(--surface); }
+.lesson-round-steps { display:flex; align-items:center; gap:5px; flex-shrink:0; }
+.lesson-round-steps > button { position:relative; width:38px; height:38px; display:grid; place-items:center; border-radius:50%; border:1px solid var(--border); color:var(--muted); background:var(--surface-2); font:12px var(--mono); }
+.lesson-round-steps > button.complete { border-color:var(--accent); color:var(--accent); }
+.lesson-round-steps > button.current { border-color:var(--accent); color:var(--text); background:var(--accent-light); box-shadow:0 0 0 2px var(--accent-light); }
+.lesson-round-steps > button:enabled:hover { border-color:var(--accent); background:var(--accent-light); }
+.lesson-round-steps > button:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.lesson-round-steps > button:disabled { opacity:.45; cursor:not-allowed; }
+.lesson-round-steps > button > svg { position:absolute; right:-2px; bottom:-2px; color:var(--accent); background:var(--surface); border-radius:50%; }
+.lesson-round-plan .previous-round { min-height:38px; font-size:10px; white-space:nowrap; }
+.lesson-round-plan .previous-round:disabled { opacity:.45; cursor:default; }
+.lesson-round-copy { min-width:0; }
+.lesson-round-copy small { display:block; font-size:10px; color:var(--muted); line-height:1.6; margin-top:7px; }
+.lesson-round-plan strong { display:block; font-size:11px; font-weight:500; }
+.lesson-round-copy > span { display:block; color:var(--muted); font-size:10px; margin-top:4px; line-height:1.5; }
+.course-complete { padding:35px 24px; border:1px solid var(--border); background:var(--surface); border-radius:12px; text-align:center; }
+.course-complete > svg { color:var(--accent); }
+.course-complete h2 { font-size:24px; font-weight:500; margin:15px 0 10px; }
+.course-complete p { color:var(--muted); line-height:1.8; font-size:12px; max-width:490px; margin:0 auto 20px; }
+.course-complete small { display:block; color:var(--subtle); margin-top:16px; font-size:10px; }
+.course-complete > button { margin:0 8px; }
+.app-shell .mode-dot.story { background:#e6b56e; }
 .lesson-workspace-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:17px; }
 .lesson-workspace-heading h2 { font-size:24px; font-weight:500; letter-spacing:-.7px; margin-top:6px; }
 .lesson-workspace-heading > p { font-size:11px; color:var(--muted); }
@@ -91,6 +113,10 @@
   .guidance-choice { flex-wrap:wrap; gap:7px 10px; }
   .guidance-choice > span { display:none; }
   .guidance-choice small { font-size:9px; }
+  .lesson-round-plan { grid-template-columns:minmax(0,1fr) auto; align-items:center; padding:10px; gap:12px 8px; }
+  .lesson-round-steps { grid-column:1; grid-row:1; }
+  .lesson-round-plan .previous-round { grid-column:2; grid-row:1; }
+  .lesson-round-copy { grid-column:1 / -1; grid-row:2; }
   .word-progress { padding:12px 18px; }
   .word-progress small { display:none; }
   .app-shell .lesson-intro { flex-direction:row; gap:10px; align-items:center; }

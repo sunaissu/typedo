@@ -1,0 +1,14 @@
+{
+  "id": "./",
+  "name": "Typedo - Typing practice",
+  "short_name": "Typedo",
+  "description": "Guided typing lessons, original stories, and progress saved in your browser.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0a1020",
+  "theme_color": "#0a1020",
+  "icons": [
+    { "src": "app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

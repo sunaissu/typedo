@@ -1,0 +1,19 @@
+.profile-explanation { font-size: 15px; line-height: 1.7; }
+.profile-list { list-style: none; margin: 22px 0; padding: 0; display: grid; gap: 9px; }
+.profile-list button { width: 100%; justify-content: flex-start; min-height: 65px; padding: 13px; border: 1px solid var(--border); border-radius: 9px; text-align: left; background: var(--surface); }
+.profile-list button.current { border-color: var(--accent); background: var(--accent-light); }
+.profile-list button > span { flex: 1; min-width: 0; }
+.profile-list strong { display: block; font-size: 16px; overflow-wrap: anywhere; }
+.profile-list small { display: block; font-size: 13px; margin-top: 5px; color: var(--muted); line-height: 1.5; }
+.profile-rename { padding: 15px 0; border-top: 1px solid var(--border); }
+.profile-rename summary { cursor: pointer; font-size: 14px; color: var(--muted); }
+.profile-rename summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.profile-rename form { margin-top: 16px; }
+.profile-create { border-top: 1px solid var(--border); padding-top: 18px; }
+.profile-create label, .profile-rename label { font-size: 14px; display: block; margin-bottom: 9px; }
+.profile-form-row { display: flex; align-items: stretch; gap: 10px; }
+.profile-form-row input { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--border); border-radius: 7px; padding: 10px 12px; font-size: 16px; color: var(--text); background: var(--bg); }
+.profile-form-row input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.profile-form-row button { flex-shrink: 0; font-size: 14px; }
+.profile-close { margin-top: 20px; font-size: 14px; }
+@media (max-width: 550px) { .profile-form-row { flex-direction: column; } }

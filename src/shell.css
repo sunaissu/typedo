@@ -56,6 +56,9 @@ body { background: var(--bg); color: var(--text); transition: background-color .
 .lesson-entry strong { display: block; font-size: 12px; font-weight: 550; }
 .lesson-entry p { font-size: 10px; color: var(--muted); margin-top: 4px; line-height: 1.8; }
 .lesson-entry button { color: var(--accent); font-size: 11px; white-space: nowrap; }
+.recommendation-keys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.recommendation-keys kbd { text-transform: none; min-width: 24px; text-align: center; }
+.recommendation-active { color: var(--accent); font-size: 10px; flex-shrink: 0; }
 .app-shell.focus-mode .sidebar { opacity: .35; transition: opacity .15s; }
 .app-shell.focus-mode .sidebar:hover, .app-shell.focus-mode .sidebar:focus-within { opacity: 1; }
 .app-shell.focus-mode > main { padding-top: 35px; }
@@ -71,6 +74,30 @@ body { background: var(--bg); color: var(--text); transition: background-color .
 .setup-options label { display: flex; align-items: center; gap: 7px; cursor: pointer; font-size: 11px; color: var(--muted); min-height: 29px; }
 .setup-options input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; cursor: pointer; }
 .setup-options label:has(input:checked) { color: var(--text); }
+
+.start-page { max-width: 1000px; }
+.app-shell .start-intro h1 { max-width: 620px; font-size: clamp(29px, 3vw, 40px); line-height: 1.2; }
+.start-intro h1:focus { outline: none; }
+.app-shell .start-intro p { max-width: 580px; font-size: 14px; }
+.app-shell .start-intro .start-device { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 12px; }
+.start-device svg { flex-shrink: 0; }
+.start-lesson, .start-option { padding: 26px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.start-lesson { background: var(--accent-light); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+.start-label { display: flex; align-items: center; gap: 9px; color: var(--accent); font: 10px var(--mono); letter-spacing: 1px; }
+.start-page h2 { font-size: 21px; font-weight: 550; margin: 16px 0 9px; }
+.start-lesson > p, .start-option > p { color: var(--muted); font-size: 13px; line-height: 1.8; max-width: 600px; margin-bottom: 20px; }
+.start-page .primary-button, .start-page .secondary-button { min-height: 44px; font-size: 12px; padding: 12px 16px; }
+.start-detail { display: block; color: var(--muted); font-size: 11px; line-height: 1.7; margin-top: 11px; }
+.start-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 18px; }
+.start-option { display: flex; flex-direction: column; align-items: flex-start; }
+.start-option > svg { color: var(--accent); }
+.start-option h2 { font-size: 18px; }
+.start-option > p { flex: 1; }
+.start-notes { margin: 24px 0 28px; }
+.start-notes > p { display: flex; align-items: flex-start; gap: 10px; color: var(--muted); font-size: 12px; line-height: 1.8; margin-top: 12px; }
+.start-notes svg { flex-shrink: 0; margin-top: 2px; }
+.start-notes .text-button { margin: 14px 0 0 27px; font-size: 12px; }
+.lesson-round-instruction { color: var(--muted); font-size: 12px; line-height: 1.8; margin: 12px 2px 18px; max-width: 780px; }
 
 @media (max-width: 1180px) {
   .setup-fields { gap: 16px; grid-template-columns: 1fr 1fr 1.2fr; }
@@ -119,7 +146,11 @@ body { background: var(--bg); color: var(--text); transition: background-color .
   .sidebar .brand { font-size: 23px; padding-left: 4px; }
   .sidebar-bottom { order: 1; margin-left: auto; }
   .side-nav { order: 2; width: 100%; margin: 3px 0 0; border-top: 1px solid var(--border); padding-top: 9px; gap: 5px; }
-  .side-nav button { flex: 1; padding: 10px 8px; justify-content: center; font-size: 11px; gap: 7px; }
+  .side-nav button { flex: 1; min-width: 0; padding: 9px 2px; flex-direction: column; justify-content: center; font-size: 10px; gap: 6px; }
+  .start-options { grid-template-columns: 1fr; gap: 14px; margin-top: 14px; }
+  .start-lesson, .start-option { padding: 21px; }
+  .app-shell .start-intro p { font-size: 13px; }
+  .start-page h2 { line-height: 1.35; }
   .app-shell > main { padding-top: 24px; }
   .app-shell .intro h1 { font-size: 28px; }
   .app-shell .intro p { font-size: 11px; max-width: 330px; }
@@ -139,6 +170,7 @@ body { background: var(--bg); color: var(--text); transition: background-color .
   .lesson-entry strong { font-size: 11px; }
   .lesson-entry p { font-size: 9px; }
   .lesson-entry button { font-size: 10px; gap: 3px; }
+  .practice-recommendation { flex-wrap: wrap; }
   .app-shell .progress-columns { grid-template-columns: 1fr; }
   .app-shell .result-content { gap: 20px; }
   .app-shell .result-secondary { gap: 16px; }

@@ -1,0 +1,92 @@
+.app.app-shell { font-size: 14px; }
+:root[data-accent="forest"] { --accent: #7ad8b5; --accent-hover: #9be6ca; --accent-light: rgba(122,216,181,.12); }
+:root[data-accent="plum"] { --accent: #c3a5f5; --accent-hover: #d4bffa; --accent-light: rgba(195,165,245,.12); }
+:root[data-theme="light"][data-accent="forest"] { --accent: #255f48; --accent-hover: #194533; --accent-light: rgba(37,95,72,.1); }
+:root[data-theme="light"][data-accent="plum"] { --accent: #7044a0; --accent-hover: #57317f; --accent-light: rgba(112,68,160,.1); }
+.milestones { margin: 20px 0; }
+.milestones ul { list-style: none; display: grid; grid-template-columns: repeat(auto-fit,minmax(230px,1fr)); gap: 20px; padding: 0; margin: 20px 0; }
+.milestones li { display: flex; gap: 12px; color: var(--muted); }
+.milestones li.earned > span { color: var(--accent); }
+.milestones li p { font-size: 14px; margin-top: 5px; }
+.milestone-empty { display: block; border: 1px solid var(--border); width: 18px; height: 18px; border-radius: 50%; }
+.backup-reminder { margin-bottom: 20px; }
+.app-shell p { line-height: 1.7; }
+.app-shell .intro p, .app-shell .start-detail, .app-shell .panel-note,
+.app-shell .lesson-round-instruction, .app-shell .lesson-result-description,
+.app-shell .practice-note, .app-shell .typing-bottomline, .app-shell .lesson-typing-bottom,
+.app-shell .story-typing-bottom, .app-shell .lesson-help, .app-shell .storage-note { font-size: 14px; }
+.app-shell .side-nav button, .app-shell .sidebar-bottom button { font-size: 14px; min-height: 44px; }
+.app-shell .sidebar-local { font: 12px/1.5 var(--sans, sans-serif); }
+.app-shell .sidebar-label, .app-shell .eyebrow { font-size: 11px; }
+.app-shell .sidebar-course > span, .app-shell .sidebar-course > small { font-size: 12px; line-height: 1.5; }
+.library-nav { margin: 12px 4px 0; justify-content: flex-start; text-align: left; gap: 10px; padding: 12px 10px; font-size: 14px; color: var(--muted); }
+.library-nav.active { color: var(--accent); background: var(--accent-light); }
+.app-shell .words-text { font-size: var(--passage-size, 28px); line-height: var(--passage-line-height, 1.9); }
+.app-shell .words-window { height: calc(var(--passage-size, 28px) * var(--passage-line-height, 1.9) * 3.4); min-height: 150px; }
+.app-shell .char.incorrect { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 5px; }
+.app-shell :focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+.app-shell .typing-input:focus-visible { outline: none; }
+.app-shell .typing-card:focus-within, .app-shell .lesson-typing-card:focus-within, .app-shell .story-typing-card:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+.skip-link { position: fixed; left: 20px; top: 12px; z-index: 100; transform: translateY(-200%); padding: 12px 20px; background: var(--surface); color: var(--text); border: 2px solid var(--accent); border-radius: 8px; }
+.skip-link:focus { transform: translateY(0); }
+.skip-practice { left: 230px; }
+.session-actions { display: flex; gap: 12px; align-items: center; justify-content: flex-end; flex-wrap: wrap; margin: 12px 0; }
+.session-actions button { min-height: 40px; font-size: 14px; }
+.session-actions kbd { margin-left: 6px; font-size: 12px; }
+.app-shell .lesson-outline, .app-shell .lesson-preferences-disclosure, .app-shell .lesson-review-disclosure { margin-bottom: 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.lesson-outline > summary, .lesson-preferences-disclosure > summary, .lesson-review-disclosure > summary { padding: 13px 16px; cursor: pointer; font-size: 14px; color: var(--text); }
+.lesson-outline .lesson-course { margin: 0; padding: 8px 14px 16px; }
+.lesson-preferences-disclosure .lesson-preferences { border: 0; margin: 0; padding: 8px 16px 18px; }
+.lesson-review-disclosure > :not(summary) { margin: 0 14px 14px; }
+.app-shell .lesson-course-card .lesson-card-status, .app-shell .lesson-retention-status { font-size: 12px; line-height: 1.5; }
+.app-shell .lesson-preferences label { font-size: 14px; }
+.app-shell .lesson-preferences select, .app-shell .setup-field select { font-size: 14px; min-height: 44px; }
+.app-shell .setup-field > span, .app-shell .setup-options legend, .app-shell .setup-options label { font-size: 14px; }
+.app-shell .setup-heading { font-size: 11px; }
+.app-shell .lesson-round-progress { font-size: 14px; }
+.app-shell .lesson-typing-bottom { flex-wrap: wrap; gap: 12px; }
+.app-shell .lesson-typing-bottom .session-actions { margin: 0; }
+.app-shell .under-test { font-size: 13px; gap: 12px; flex-wrap: wrap; }
+.app-shell .under-test > div { flex-wrap: wrap; }
+.app-shell .focus-prompt { pointer-events: none; }
+.app-shell .focus-prompt button { pointer-events: auto; }
+.app-shell.hide-live-stats .live-metrics > span:not(.timer),
+.app-shell.hide-live-stats .lesson-live-stats > span:not(:last-child) { visibility: hidden; }
+.app-shell.focus-mode .sidebar { opacity: 1; }
+.app-shell.focus-mode .bottom-stats, .app-shell.focus-mode .lesson-entry, .app-shell.focus-mode .intro { display: none; }
+.app-shell.focus-mode .workspace-controls { margin-top: 0; }
+.session-dialog { width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; padding: 26px; border: 1px solid var(--border); border-radius: 16px; color: var(--text); background: var(--surface); }
+.session-dialog::backdrop { background: rgba(4, 10, 22, .72); }
+.session-dialog p { font-size: 15px; line-height: 1.7; margin: 12px 0; }
+.session-dialog .panel-note { font-size: 13px; }
+.session-dialog .modal-heading { gap: 18px; }
+.session-dialog .modal-heading h2 { font-size: 23px; }
+.session-dialog button { min-height: 42px; }
+.pause-symbol { color: var(--accent); }
+.pause-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 22px 0; }
+.interrupted-note { border-left: 3px solid var(--accent); background: var(--accent-light); padding: 12px 16px; font-size: 14px; color: var(--text); line-height: 1.7; margin: 12px 0; }
+.reading-settings { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px; margin: 20px 0; }
+.reading-settings label, .comparison-control { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.reading-settings select, .comparison-control select { min-height: 44px; width: 100%; padding: 8px 12px; color: var(--text); background: var(--key-bg); border: 1px solid var(--border); border-radius: 7px; font: inherit; }
+.comparison-control { margin: 14px 0 20px; }
+.comparison-control select { max-width: 100%; }
+.history-interrupted { display: block; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.app-shell .history-panel th, .app-shell .history-panel td { font-size: 14px; }
+.app-shell .result-secondary span { font-size: 13px; }
+.app-shell .goal-ring { font-variant-numeric: tabular-nums; }
+.session-dialog details { margin: 18px 0; }
+.session-dialog summary { cursor: pointer; font-size: 15px; padding: 8px 0; }
+.session-dialog .shortcut-list { font-size: 14px; }
+@media (max-width: 900px) {
+  .app.app-shell { width: calc(100% - 28px); gap: 20px; }
+  .app-shell .lesson-typing-bottom .session-actions { justify-content: flex-start; }
+}
+@media (max-width: 600px) {
+  .app.app-shell { width: calc(100% - 24px); }
+  .reading-settings { grid-template-columns: 1fr; }
+  .session-dialog { padding: 20px; }
+  .session-actions { justify-content: flex-start; }
+  .skip-practice { left: 20px; top: 70px; }
+  .app-shell .typing-topline { flex-wrap: wrap; gap: 10px; }
+  .app-shell .sidebar .library-nav { margin: 0; }
+}

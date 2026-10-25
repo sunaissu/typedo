@@ -5,7 +5,7 @@ export function GuidanceChoice({ enabled, onChange }) {
   return <div className="guidance-choice" role="group" aria-label="Typing assistance">
     <span>YOUR PACE</span><div>
       <button type="button" aria-pressed={enabled} onClick={() => onChange(true)}><Hand size={14} />Beginner</button>
-      <button type="button" aria-pressed={!enabled} onClick={() => onChange(false)}><KeyboardIcon size={14} />Independent</button>
+      <button type="button" aria-pressed={!enabled} onClick={() => onChange(false)}><KeyboardIcon size={14} />Without finger hints</button>
     </div><small>{enabled ? 'See which finger to use' : 'Type without the hands'}</small>
   </div>;
 }

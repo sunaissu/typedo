@@ -50,12 +50,100 @@ test('strict practice waits on the same character after a mistake', () => {
   assert.equal(metrics(session).accuracy, 50);
 });
 
+test('repeated strict-practice mistakes retain the actual key and reset after correction', () => {
+  const config = { mode: 'practice', strict: true };
+  let session = enterKey(createSession('Aa'), 'a', config, 100);
+  assert.equal(session.lastWrong, 'A', 'Existing expected-key feedback remains unchanged');
+  assert.equal(session.lastWrongKey, 'a');
+  assert.equal(session.lastWrongPosition, 0);
+  assert.equal(session.wrongStreak, 1);
+  session = enterKey(session, 's', config, 200);
+  assert.equal(session.lastWrongKey, 's', 'The most recent incorrect key is available to the lesson');
+  assert.equal(session.wrongStreak, 2);
+  assert.equal(session.typed, '');
+  session = enterKey(session, 'A', config, 300);
+  assert.equal(session.lastWrong, null);
+  assert.equal(session.lastWrongKey, null);
+  assert.equal(session.lastWrongPosition, null);
+  assert.equal(session.wrongStreak, 0);
+  session = enterKey(session, 'A', config, 400);
+  assert.equal(session.wrongStreak, 1, 'A later position starts a new sequence');
+  assert.equal(session.lastWrongPosition, 1);
+  assert.deepEqual(session.keyStats, { A: { attempts: 3, errors: 2 }, a: { attempts: 1, errors: 1 } });
+});
+
+test('backspacing clears repeated-error feedback without erasing mistakes', () => {
+  const config = { mode: 'practice', strict: true };
+  let session = createSession('ab');
+  for (const [index, key] of ['a', 'x', 'y', 'Backspace'].entries()) session = enterKey(session, key, config, 100 + index * 100);
+  assert.equal(session.typed, '');
+  assert.equal(session.lastWrong, null);
+  assert.equal(session.lastWrongKey, null);
+  assert.equal(session.lastWrongPosition, null);
+  assert.equal(session.wrongStreak, 0);
+  assert.equal(metrics(session).errors, 2);
+  assert.equal(enterKey(session, 'x', config, 600).wrongStreak, 1);
+});
+
+test('mistakes at consecutive positions do not count as repeated attempts at one key', () => {
+  const config = { mode: 'custom' };
+  let session = enterKey(createSession('aaa'), 'x', config, 100);
+  session = enterKey(session, 'x', config, 200);
+  assert.equal(session.wrongStreak, 1);
+  assert.equal(session.lastWrongPosition, 1);
+  assert.equal(session.typed, 'xx');
+});
+
+test('sessions missing new feedback fields can resume without altering accuracy', () => {
+  const config = { mode: 'practice', strict: true };
+  const legacy = createSession('ab');
+  delete legacy.lastWrongKey;
+  delete legacy.lastWrongPosition;
+  delete legacy.wrongStreak;
+  let session = enterKey(legacy, 'x', config, 100);
+  session = enterKey(session, 'y', config, 200);
+  assert.equal(session.wrongStreak, 2);
+  assert.equal(session.lastWrongKey, 'y');
+  session = enterKey(session, 'a', config, 300);
+  assert.equal(metrics(session).accuracy, 33.3);
+});
+
+test('typing records capital and punctuation mistakes separately from lowercase letters', () => {
+  const config = { ...DEFAULT_SETTINGS, mode: 'practice', strict: true };
+  let session = createSession('Aa?');
+  for (const [index, key] of ['a', 'A', 'a', '/', '?'].entries()) {
+    session = enterKey(session, key, config, 100 + index * 100);
+  }
+  assert.equal(session.status, 'finished');
+  assert.equal(session.typed, 'Aa?');
+  assert.deepEqual(session.keyStats, {
+    A: { attempts: 2, errors: 1 },
+    a: { attempts: 1, errors: 0 },
+    '?': { attempts: 2, errors: 1 },
+  });
+  const progress = { ...emptyProgress(), keyStats: session.keyStats };
+  assert.deepEqual(validateProgress(progress).keyStats, session.keyStats, 'Saved backups preserve exact-case evidence');
+});
+
 test('empty backspace and modifier keys do not start timing', () => {
   for (const key of ['Backspace', 'Shift', 'Enter', 'Tab', 'ArrowLeft']) {
     const session = enterKey(createSession('abc'), key, DEFAULT_SETTINGS, 100);
     assert.equal(session.status, 'ready');
     assert.equal(session.startedAt, null);
   }
+});
+
+test('resuming a ready session carries active elapsed time into its next tick', () => {
+  const config = { mode: 'custom' };
+  const saved = { ...createSession('abc'), typed: 'a', attempts: 1, correctAttempts: 1, elapsed: 5000, keyStats: { a: { attempts: 1, errors: 0 } } };
+  assert.equal(enterKey(saved, 'Shift', config, 90000), saved);
+  const resumed = enterKey(saved, 'b', config, 90000);
+  assert.equal(resumed.startedAt, 85000);
+  assert.equal(resumed.elapsed, 5000);
+  assert.equal(tick(resumed, config, 90500).elapsed, 5500);
+  const fresh = enterKey(createSession('abc'), 'a', config, 90000);
+  assert.equal(fresh.startedAt, 90000);
+  assert.equal(fresh.elapsed, 0);
 });
 
 test('deadline is checked before accepting input and clamps delayed ticks', () => {

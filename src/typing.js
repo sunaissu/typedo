@@ -1,20 +1,14 @@
 export const WORDS = ('the be to of and a in that have it for not on with he as you do at this but his by from they we say her she or an will my one all would there their what so up out if about who get which go me when make can like time no just him know take people into year your good some could them see other than then now look only come its over think also back after use two how our work first well way even new want because any these give day most us find little still place long world feel hand home great high small between own under last right move help play light sound word line point turn next show every near open once learn need life air change keep mother answer should call school while along might close something seem walk start always those both paper together got group often run important until children side feet car mile night sea white begin grew river four carry state head watch far father tree story left few read really name city eye never best another each set food book water room end friend house morning clear write slow train sky quiet warm happy garden through heart green road better around keep kind follow form before letter rhythm flow focus bright simple space steady practice move build fresh calm soft blue shape mind today tomorrow learn').split(' ');
 
+import { generateWeakPractice, recommendedKeys } from './adaptivePractice.js';
+export { getPracticeRecommendation } from './adaptivePractice.js';
+
 const PRACTICE_PHRASES = {
   home: ['a lad asks dad', 'dad has a glass', 'a flag falls', 'dad adds half a glass', 'a lad has a salad', 'a glad lad has a flag', 'dad shall add a dash', 'a flask falls'],
   top: ['we read a short story', 'the sky is quiet today', 'write your ideas here', 'you are ready to type', 'take a little rest', 'put the water here', 'the little dog is asleep', 'we share a great idea', 'your tea is ready', 'the yellow kite flies'],
   bottom: ['the fox naps by the box', 'bring a warm cup of milk', 'we made room for a new plant', 'the next bus comes at noon', 'move the blue chair', 'mix the cake in a big bowl', 'the lazy cat loves the sun', 'my bike has a new bell'],
   all: ['meet me by the garden gate', 'we can try a new recipe', 'a small note made her smile', 'the rain stopped before lunch', 'leave a little room for dessert', 'the dog found his favorite ball', 'take the blue train home', 'send a quick reply when you can'],
 };
-const WEAK_KEY_PHRASES = [
-  ...Object.values(PRACTICE_PHRASES).flat(),
-  'the jazz band plays at noon', 'zip your coat before you go', 'we saw a zebra at the zoo', 'a dozen eggs fit in the box',
-  'join me for a cup of juice', 'june has a new job', 'the jelly jar is on the shelf', 'we enjoy a joke at lunch',
-  'the quiz has a quick answer', 'a quiet room is quite nice', 'we made an extra box', 'six foxes cross the field',
-  'Bring tea, milk, and a cup.', 'Yes, I can meet you there.', 'At noon, we will head home.', 'We have apples, pears, and plums.',
-  'Leave a note; I will read it later.', 'The tea is hot; let it cool.', 'Take your time; we can wait.', 'The sun is out; bring a hat.',
-];
-
 export const LESSONS = [
   { id: 'home', title: 'Home row', subtitle: 'Short words, familiar keys', keys: 'asdfghjkl;', badge: '01', words: 'sad lad flask flash glad hall ash fall shall gas dash half glass has ask all' },
   { id: 'top', title: 'Top row', subtitle: 'Reach up, return home', keys: 'qwertyuiop', badge: '02', words: 'we were type quiet power write true try pretty upper tree tire wire route query your' },
@@ -43,25 +37,16 @@ export function keyGuide(char = ' ') {
 }
 
 export function weakKeys(stats, limit = 5) {
-  return Object.entries(stats)
-    .filter(([key, value]) => /^[a-z;,.]$/.test(key) && value.errors > 0)
-    .sort((a, b) => (b[1].errors / b[1].attempts) - (a[1].errors / a[1].attempts) || b[1].errors - a[1].errors)
-    .slice(0, limit).map(([key, value]) => ({ key, ...value }));
+  return recommendedKeys(stats, limit);
 }
 
-export function generateText(config, stats = {}, random = Math.random) {
+export function generateText(config, stats = {}, random = Math.random, previousText = '') {
   const pick = list => list[Math.floor(random() * list.length) % list.length];
   if (config.mode === 'custom') return config.customText.replace(/[^\x20-\x7e\n\r\t]/g, '').trim().replace(/\s+/g, ' ').slice(0, 1500) || 'Small steps make steady progress.';
   if (config.mode === 'practice') {
     const lesson = LESSONS.find(l => l.id === config.lesson) || LESSONS[0];
-    let phrases = PRACTICE_PHRASES[lesson.id] || PRACTICE_PHRASES.home;
-    if (lesson.id === 'weak') {
-      const keys = weakKeys(stats).map(item => item.key);
-      if (keys.length) {
-        const matches = WEAK_KEY_PHRASES.filter(phrase => keys.some(key => phrase.toLowerCase().includes(key)));
-        if (matches.length) phrases = matches;
-      }
-    }
+    if (lesson.id === 'weak') return generateWeakPractice(stats, random, previousText);
+    const phrases = PRACTICE_PHRASES[lesson.id] || PRACTICE_PHRASES.home;
     const available = [...phrases];
     const selected = [];
     for (let i = 0; i < Math.min(4, phrases.length); i++) {
@@ -85,7 +70,7 @@ export function generateText(config, stats = {}, random = Math.random) {
 }
 
 export function createSession(text) {
-  return { text, typed: '', status: 'ready', startedAt: null, elapsed: 0, attempts: 0, correctAttempts: 0, keyStats: {}, samples: [], lastWrong: null };
+  return { text, typed: '', status: 'ready', startedAt: null, elapsed: 0, attempts: 0, correctAttempts: 0, keyStats: {}, samples: [], lastWrong: null, lastWrongKey: null, lastWrongPosition: null, wrongStreak: 0 };
 }
 
 export function metrics(session, elapsed = session.elapsed) {
@@ -108,23 +93,39 @@ export function tick(session, config, now) {
   return next;
 }
 
+export function pauseSession(session, config, now, { interrupt = false } = {}) {
+  const next = tick(session, config, now);
+  if (next.status === 'finished' || next.status === 'paused') return next;
+  return { ...next, status: 'paused', startedAt: null, interrupted: Boolean(next.interrupted || (interrupt && next.attempts > 0)) };
+}
+
+export function resumeSession(session) {
+  return session.status === 'paused' ? { ...session, status: 'ready', startedAt: null } : session;
+}
+
 export function enterKey(session, key, config, now) {
   let next = tick(session, config, now);
-  if (next.status === 'finished') return next;
-  if (key === 'Backspace') return { ...next, typed: next.typed.slice(0, -1), lastWrong: null };
+  if (next.status === 'finished' || next.status === 'paused') return next;
+  if (key === 'Backspace') return { ...next, typed: next.typed.slice(0, -1), lastWrong: null, lastWrongKey: null, lastWrongPosition: null, wrongStreak: 0 };
   if (key.length !== 1 || !/^[\x20-\x7e]$/.test(key)) return next;
-  if (next.startedAt === null) next = { ...next, status: 'running', startedAt: now };
+  if (next.startedAt === null) next = { ...next, status: 'running', startedAt: now - next.elapsed };
   const expected = next.text[next.typed.length];
   if (expected === undefined) return next;
   const correct = key === expected;
-  const statKey = expected.toLowerCase();
+  const statKey = expected;
   const prev = next.keyStats[statKey] || { attempts: 0, errors: 0 };
+  const wrongPosition = next.typed.length;
+  const previousWrongStreak = Number.isSafeInteger(next.wrongStreak) && next.wrongStreak > 0 ? next.wrongStreak : 0;
+  const wrongStreak = correct ? 0 : next.lastWrongPosition === wrongPosition && next.lastWrong === expected ? previousWrongStreak + 1 : 1;
   const typed = config.mode === 'practice' && config.strict && !correct ? next.typed : next.typed + key;
   if (config.mode === 'time' && next.text.length - typed.length < 100) next = { ...next, text: next.text + ' ' + generateText(config) };
   return {
     ...next, typed, attempts: next.attempts + 1, correctAttempts: next.correctAttempts + Number(correct),
     keyStats: { ...next.keyStats, [statKey]: { attempts: prev.attempts + 1, errors: prev.errors + Number(!correct) } },
     lastWrong: correct ? null : expected,
+    lastWrongKey: correct ? null : key,
+    lastWrongPosition: correct ? null : wrongPosition,
+    wrongStreak,
     status: config.mode !== 'time' && typed.length >= next.text.length ? 'finished' : 'running',
   };
 }

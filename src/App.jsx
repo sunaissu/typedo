@@ -1,16 +1,29 @@
 import { useEffect, useRef, useState } from 'react';
-import { Activity, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Award, BarChart3, BookOpen, CircleHelp, Clock3, Code2, Flame, Hand, Keyboard as KeyboardIcon, Leaf, Moon, RotateCcw, Settings2, ShieldCheck, Sparkles, Sun, Target, Type, Upload, Volume2, VolumeX, X } from 'lucide-react';
+import { Activity, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Award, BarChart3, BookOpen, CircleHelp, Clock3, Code2, Flame, Hand, House, Keyboard as KeyboardIcon, Leaf, Moon, RotateCcw, Settings2, ShieldCheck, Sparkles, Sun, Target, Type, Upload, Volume2, VolumeX, X } from 'lucide-react';
 import Keyboard from './Keyboard.jsx';
 import TypingCoach, { GuidanceChoice, WordProgress } from './TypingCoach.jsx';
 import Lessons from './Lessons.jsx';
+import Stories from './Stories.jsx';
+import Start from './Start.jsx';
+import PracticeLibrary from './PracticeLibrary.jsx';
+import Diagnostic from './Diagnostic.jsx';
+import Challenges from './Challenges.jsx';
+import { readSharedChallenge } from './challenges.js';
+import PauseDialog, { Dialog as Modal, ConfirmRestart } from './SessionControls.jsx';
+import { sanitizeLessonDrafts } from './lessonDrafts.js';
+import { createWorkspaceDraft, restoreWorkspaceSession, sanitizeWorkspaceDrafts, workspaceKey } from './workspaceDrafts.js';
+import { sanitizeSavedPassages } from './practiceLibrary.js';
+import { STORIES, applyStoryResult } from './stories.js';
+import { sanitizeStoryDrafts } from './storyDrafts.js';
 import TestSetup from './TestSetup.jsx';
-import { LESSON_COURSE, applyLessonResult, sanitizeLessonProgress } from './lessons.js';
-import { LESSONS, createSession, enterKey, generateText, localDay, mergeKeyStats, metrics, streak, tick, weakKeys } from './typing.js';
-import { DEFAULT_SETTINGS, emptyProgress, readProgress, validateProgress, writeProgress } from './storage.js';
+import { LESSON_COURSE, applyLessonResult, lessonPracticeComplete, sanitizeLessonProgress } from './lessons.js';
+import { applyLessonLearningResult, getDueLessonReviews } from './lessonLearning.js';
+import { LESSONS, createSession, enterKey, generateText, getPracticeRecommendation, localDay, mergeKeyStats, metrics, pauseSession, resumeSession, streak, tick, weakKeys } from './typing.js';
+import { DEFAULT_SETTINGS, STORAGE_KEY, discardedDraftsNotice, emptyProgress, mergeProgress, readProgress, validateProgress, writeProgress } from './storage.js';
 
-function initialData() {
-  try { return readProgress(window.localStorage); }
-  catch { return { progress: emptyProgress(), warning: 'Browser storage is unavailable. Export your progress before leaving.' }; }
+function initialData(storageKey) {
+  try { return readProgress(window.localStorage, storageKey); }
+  catch { return { progress: emptyProgress(), warning: 'Browser storage is unavailable. Export your progress before leaving.', writeBlocked: true, recoveryRaw: null }; }
 }
 
 function Toggle({ checked, onChange, children }) {
@@ -29,26 +42,26 @@ function Chart({ data, height = 100 }) {
   </svg>;
 }
 
-function Modal({ title, onClose, children }) {
-  const dialog = useRef(null);
-  useEffect(() => { dialog.current.showModal(); }, []);
-  return <dialog ref={dialog} onCancel={onClose} onClick={event => { if (event.target === dialog.current) onClose(); }} aria-label={title}>
-    <div className="modal-heading"><h2>{title}</h2><button className="icon-button" aria-label="Close dialog" onClick={onClose}><X size={20} /></button></div>{children}
-  </dialog>;
-}
-
 const modeLabel = settings => settings.mode === 'time' ? `${settings.duration}s test` : settings.mode === 'words' ? `${settings.wordCount} words` : settings.mode === 'practice' ? `${LESSONS.find(l => l.id === settings.lesson)?.title} practice` : 'Custom text';
-const category = settings => `${settings.mode}:${settings.mode === 'time' ? settings.duration : settings.mode === 'words' ? settings.wordCount : settings.mode === 'practice' ? settings.lesson : 'custom'}:${settings.punctuation}:${settings.numbers}:${settings.mode === 'practice' && settings.strict}`;
+const category = workspaceKey;
 const formatSeconds = value => `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, '0')}`;
 
-export default function App() {
-  const [initial] = useState(initialData);
+export default function App({ storageKey = STORAGE_KEY, profileName, onManageProfiles, externalSuspended = false }) {
+  const [initial] = useState(() => initialData(storageKey));
   const [progress, setProgress] = useState(initial.progress);
   const [warning, setWarning] = useState(initial.warning);
   const [storageAvailable, setStorageAvailable] = useState(false);
+  const [recoveryRaw, setRecoveryRaw] = useState(initial.recoveryRaw);
+  const writeBlockedRef = useRef(initial.writeBlocked === true);
   const settings = progress.settings;
-  const [session, setSession] = useState(() => createSession(generateText(settings, progress.keyStats)));
-  const [view, setView] = useState('type');
+  const hasPractice = progress.history.length > 0 || Object.keys(progress.lessonProgress || {}).length > 0 || Object.keys(progress.storyProgress || {}).length > 0 || Object.keys(progress.storyDrafts || {}).length > 0 || Object.keys(progress.lessonDrafts || {}).length > 0 || Object.keys(progress.workspaceDrafts || {}).length > 0;
+  const [session, setSession] = useState(() => restoreWorkspaceSession(progress.workspaceDrafts?.[category(settings)]) || { ...createSession(generateText(settings, progress.keyStats)), runId: crypto.randomUUID() });
+  const [sharedChallenge] = useState(() => readSharedChallenge(window.location.hash));
+  const [view, setView] = useState(() => sharedChallenge ? 'challenges' : 'start');
+  const [activityRequest, setActivityRequest] = useState(null);
+  const [pauseOpen, setPauseOpen] = useState(false);
+  const [restartRequest, setRestartRequest] = useState(null);
+  const [comparison, setComparison] = useState('');
   const [modal, setModal] = useState(null);
   const [focused, setFocused] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
@@ -63,9 +76,20 @@ export default function App() {
   const uploadRef = useRef(null);
   const sessionRef = useRef(session);
   const settingsRef = useRef(settings);
+  const progressRef = useRef(progress);
+  progressRef.current = progress;
   const recordedRef = useRef(false);
   const audioRef = useRef(null);
+  const viewRef = useRef(view);
+  viewRef.current = view;
   settingsRef.current = settings;
+
+  function updateProgress(value, flush = false) {
+    const next = typeof value === 'function' ? value(progressRef.current) : value;
+    progressRef.current = next;
+    setProgress(next);
+    if (flush) persistProgress(next);
+  }
 
   const updateSession = next => {
     sessionRef.current = next;
@@ -73,24 +97,70 @@ export default function App() {
     if (next.status === 'finished' && !recordedRef.current) {
       recordedRef.current = true;
       const config = settingsRef.current;
-      const result = { id: crypto.randomUUID(), date: new Date().toISOString(), mode: config.mode, label: modeLabel(config), category: category(config), elapsed: next.elapsed, ...metrics(next) };
-      setProgress(current => ({ ...current, history: [result, ...current.history].slice(0, 500), keyStats: mergeKeyStats(current.keyStats, next.keyStats) }));
+      const result = { id: next.runId, date: new Date().toISOString(), mode: config.mode, label: modeLabel(config), category: category(config), interrupted: next.interrupted === true, elapsed: next.elapsed, ...metrics(next) };
+      updateProgress(current => {
+        if (current.history.some(run => run.id === result.id)) return current;
+        const workspaceDrafts = { ...current.workspaceDrafts };
+        delete workspaceDrafts[category(config)];
+        return { ...current, workspaceDrafts, history: [result, ...current.history].slice(0, 500), keyStats: mergeKeyStats(current.keyStats, next.keyStats) };
+      }, true);
+    } else if (next.attempts > 0 && next.status !== 'finished') {
+      saveWorkspace(next);
     }
   };
 
-  useEffect(() => {
+  function saveWorkspace(current = sessionRef.current, flush = false) {
+    const draft = createWorkspaceDraft(current, settingsRef.current);
+    if (!draft) return;
+    const drafts = { ...progressRef.current.workspaceDrafts, [category(draft.config)]: draft };
+    if (Object.keys(drafts).length > 100) setNotice('Your 100 most recent unfinished typing activities are kept. The oldest draft was replaced; completed results stay saved.');
+    updateProgress(value => ({ ...value, workspaceDrafts: sanitizeWorkspaceDrafts(drafts, value.history) }), flush);
+  }
+
+  function pauseWorkspace(show = true) {
+    if (sessionRef.current.status === 'finished') return;
+    const next = pauseSession(sessionRef.current, settingsRef.current, performance.now(), { interrupt: ['time', 'words'].includes(settingsRef.current.mode) });
+    updateSession(next);
+    saveWorkspace(next, true);
+    if (show && next.status !== 'finished') setPauseOpen(true);
+  }
+
+  function resumeWorkspace() {
+    setPauseOpen(false);
+    updateSession(resumeSession(sessionRef.current));
+    requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
+  }
+
+  function openModal(name) {
+    if (viewRef.current === 'type') pauseWorkspace(false);
+    setPauseOpen(false);
+    setModal(name);
+  }
+
+  function requestRestart(options = {}) {
+    if (sessionRef.current.attempts && sessionRef.current.status !== 'finished') {
+      pauseWorkspace(false);
+      setPauseOpen(false);
+      setRestartRequest(options);
+    } else reset(options);
+  }
+
+  function persistProgress(value) {
+    if (writeBlockedRef.current) { setStorageAvailable(false); return; }
     let message;
-    try { message = writeProgress(window.localStorage, progress); }
+    try { message = writeProgress(window.localStorage, value, storageKey); }
     catch { message = 'Browser storage is unavailable. Export your progress before leaving.'; }
     setStorageAvailable(!message);
     if (message) setWarning(message);
-  }, [progress]);
+  }
+  useEffect(() => { persistProgress(progress); }, [progress]);
   useEffect(() => {
     document.documentElement.dataset.theme = settings.theme;
+    document.documentElement.dataset.accent = settings.accent || 'blue';
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', settings.theme === 'dark' ? '#0a1020' : '#f2f5fb');
-  }, [settings.theme]);
+  }, [settings.theme, settings.accent]);
   useEffect(() => {
-    if (settings.themeRevision !== 2) setProgress(current => ({ ...current, settings: { ...current.settings, theme: 'dark', themeRevision: 2 } }));
+    if (settings.themeRevision !== 2) updateProgress(current => ({ ...current, settings: { ...current.settings, theme: 'dark', themeRevision: 2 } }));
   }, [settings.themeRevision]);
   useEffect(() => { if (session.status === 'finished') restartRef.current?.focus({ preventScroll: true }); }, [session.status]);
   useEffect(() => {
@@ -109,28 +179,57 @@ export default function App() {
     const viewport = wordsRef.current;
     if (caret && viewport) viewport.scrollTop = Math.max(0, caret.offsetTop - viewport.offsetTop - 57);
   }, [session.typed.length]);
-  useEffect(() => { if (view === 'type' && !modal) inputRef.current?.focus({ preventScroll: true }); }, [view, modal]);
+  useEffect(() => {
+    if (view === 'type') {
+      if (sessionRef.current.status === 'paused') setPauseOpen(true);
+      else inputRef.current?.focus({ preventScroll: true });
+    } else if (!['lessons', 'stories', 'start'].includes(view)) document.querySelector('main h1')?.focus({ preventScroll: true });
+  }, [view]);
+  useEffect(() => {
+    const pause = () => { if (viewRef.current === 'type' && sessionRef.current.status === 'running') pauseWorkspace(true); };
+    const hidden = () => { if (document.visibilityState === 'hidden') pause(); };
+    window.addEventListener('blur', pause);
+    window.addEventListener('pagehide', pause);
+    document.addEventListener('visibilitychange', hidden);
+    return () => { window.removeEventListener('blur', pause); window.removeEventListener('pagehide', pause); document.removeEventListener('visibilitychange', hidden); };
+  }, []);
+  useEffect(() => {
+    if (viewRef.current !== 'type') return;
+    if (externalSuspended) pauseWorkspace(false);
+    else if (sessionRef.current.status === 'paused') setPauseOpen(true);
+  }, [externalSuspended]);
 
-  function reset({ config = settingsRef.current, repeat = false, focus = true } = {}) {
+  function reset({ config = settingsRef.current, repeat = false, focus = true, keyStats = progressRef.current.keyStats } = {}) {
     recordedRef.current = false;
-    const next = createSession(repeat ? sessionRef.current.text : generateText(config, progress.keyStats));
+    const next = { ...createSession(repeat ? sessionRef.current.text : generateText(config, keyStats, Math.random, sessionRef.current.text)), runId: crypto.randomUUID() };
+    updateProgress(current => { const workspaceDrafts = { ...current.workspaceDrafts }; delete workspaceDrafts[category(config)]; return { ...current, workspaceDrafts }; });
+    setPauseOpen(false);
     sessionRef.current = next;
     setSession(next);
     if (wordsRef.current) wordsRef.current.scrollTop = 0;
     if (focus) requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
   }
   function changeSettings(patch, restart = true) {
+    if (restart && sessionRef.current.attempts && sessionRef.current.status !== 'finished') pauseWorkspace(false);
     const config = { ...settingsRef.current, ...patch };
     settingsRef.current = config;
-    setProgress(current => ({ ...current, settings: config }));
-    if (restart) reset({ config });
+    updateProgress(current => ({ ...current, settings: config }));
+    if (restart) {
+      const draft = progressRef.current.workspaceDrafts?.[category(config)];
+      const restored = draft && (!Object.hasOwn(patch, 'customText') || draft.text === generateText(config)) ? restoreWorkspaceSession(draft) : null;
+      if (restored) { sessionRef.current = restored; setSession(restored); recordedRef.current = false; setPauseOpen(false); }
+      else reset({ config, focus: false });
+    }
   }
   function navigate(target) {
-    if (sessionRef.current.status === 'running') reset({ focus: false });
+    if (viewRef.current === 'type' && sessionRef.current.status !== 'finished' && sessionRef.current.attempts) pauseWorkspace(false);
+    setPauseOpen(false);
+    setActivityRequest(null);
     setView(target);
     setFocusMode(false);
   }
   function practiceWeak() {
+    setFocusMode(false);
     setView('type');
     changeSettings({ mode: 'practice', lesson: 'weak' });
   }
@@ -151,7 +250,7 @@ export default function App() {
   function handleKey(event) {
     if (event.isComposing || event.nativeEvent.isComposing) return;
     setCapsLock(event.getModifierState?.('CapsLock') || false);
-    if (event.key === 'Tab') { if (!event.shiftKey) { event.preventDefault(); restartRef.current?.focus(); } return; }
+    if (event.key === 'Tab') return;
     if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (event.key === 'Backspace' || (event.key.length === 1 && /^[\x20-\x7e]$/.test(event.key))) {
       event.preventDefault();
@@ -163,20 +262,36 @@ export default function App() {
   }
   useEffect(() => {
     const shortcuts = event => {
-      if (modal) return;
-      if (view !== 'lessons' && (event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); setView('type'); reset(); }
-      if (event.key === 'Escape' && view === 'type') { setFocusMode(false); reset(); }
+      if (modal || event.isComposing || event.target.closest?.('dialog')) return;
+      if (view === 'type' && event.key === 'Enter' && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && [inputRef.current, restartRef.current].includes(event.target)) {
+        event.preventDefault();
+        if (!event.repeat) requestRestart();
+        return;
+      }
+      if (view === 'type' && (event.ctrlKey || event.metaKey) && !event.altKey && event.key === 'Enter' && [inputRef.current, restartRef.current].includes(event.target)) { event.preventDefault(); if (!event.repeat) requestRestart(); }
+      if (event.key === 'Escape' && view === 'type' && !event.repeat && !event.ctrlKey && !event.metaKey && !event.altKey && !event.target.closest?.('select, input') && sessionRef.current.status !== 'finished') { event.preventDefault(); pauseWorkspace(); }
     };
     window.addEventListener('keydown', shortcuts);
     return () => window.removeEventListener('keydown', shortcuts);
   });
 
   function exportProgress() {
-    const blob = new Blob([JSON.stringify(progress, null, 2)], { type: 'application/json' });
+    updateProgress(current => ({ ...current, lastBackupAt: new Date().toISOString() }));
+    const blob = new Blob([JSON.stringify(progressRef.current, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = `typedo-${localDay()}.json`; anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     setNotice('Progress exported. Keep the file somewhere safe.');
+  }
+  function exportOriginalSave() {
+    if (typeof recoveryRaw !== 'string') return;
+    const url = URL.createObjectURL(new Blob([recoveryRaw], { type: 'application/json' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `typedo-original-${localDay()}.json`;
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setNotice('Original save downloaded without changes. Keep it for recovery.');
   }
   async function importProgress(event) {
     const file = event.target.files?.[0];
@@ -184,98 +299,176 @@ export default function App() {
     if (!file) return;
     try {
       if (file.size > 2_000_000) throw new Error('Choose a backup smaller than 2 MB.');
-      const imported = validateProgress(JSON.parse(await file.text()));
-      setProgress(current => {
-        const history = [...new Map([...current.history, ...imported.history].map(run => [run.id, run])).values()].sort((a, b) => Date.parse(b.date) - Date.parse(a.date)).slice(0, 500);
-        const keyStats = { ...current.keyStats };
-        for (const [key, value] of Object.entries(imported.keyStats)) keyStats[key] = { attempts: Math.max(value.attempts, keyStats[key]?.attempts || 0), errors: Math.max(value.errors, keyStats[key]?.errors || 0) };
-        const lessonProgress = { ...(current.lessonProgress || {}) };
-        for (const [id, incoming] of Object.entries(imported.lessonProgress || {})) {
-          const existing = lessonProgress[id];
-          lessonProgress[id] = existing ? {
-            practiced: existing.practiced || incoming.practiced,
-            passed: existing.passed || incoming.passed,
-            bestAccuracy: Math.max(existing.bestAccuracy, incoming.bestAccuracy),
-            bestWpm: Math.max(existing.bestWpm, incoming.bestWpm),
-            attempts: Math.max(existing.attempts, incoming.attempts),
-            lastPracticed: existing.lastPracticed >= incoming.lastPracticed ? existing.lastPracticed : incoming.lastPracticed,
-          } : incoming;
-        }
-        return { ...current, settings: imported.settings, history, keyStats, lessonProgress: sanitizeLessonProgress(lessonProgress) };
-      });
-      settingsRef.current = imported.settings;
-      setCustomDraft(imported.settings.customText);
-      reset({ config: imported.settings, focus: false });
-      setNotice('Backup restored with your settings. Existing results were kept.');
+      const source = JSON.parse(await file.text());
+      const imported = validateProgress(source);
+      const restored = mergeProgress(progressRef.current, imported);
+      writeBlockedRef.current = false;
+      setRecoveryRaw(null);
+      setWarning('');
+      updateProgress(restored);
+      settingsRef.current = restored.settings;
+      setCustomDraft(restored.settings.customText);
+      const draft = restoreWorkspaceSession(restored.workspaceDrafts?.[category(restored.settings)]);
+      if (draft) { sessionRef.current = draft; setSession(draft); recordedRef.current = false; }
+      else reset({ config: restored.settings, keyStats: restored.keyStats, focus: false });
+      setNotice(discardedDraftsNotice(source, imported) || 'Backup restored with your settings. Existing results were kept.');
     } catch (error) { setNotice(error instanceof SyntaxError ? 'That file is not a valid JSON backup.' : error.message); }
   }
 
   function completeLesson(result) {
-    const { keyStats, ...run } = result;
-    setProgress(current => {
+    const { keyStats, passage, passages, practiceRound, targetKeys, attempts, correctAttempts, textLength, guided, ...run } = result;
+    updateProgress(current => {
       if (current.history.some(item => item.id === run.id)) return current;
       return {
         ...current,
         history: [run, ...current.history].slice(0, 500),
         keyStats: mergeKeyStats(current.keyStats, keyStats),
         lessonProgress: applyLessonResult(current.lessonProgress || {}, result),
+        lessonLearning: applyLessonLearningResult(current.lessonLearning || {}, result),
+        lessonDrafts: sanitizeLessonDrafts(current.lessonDrafts, applyLessonResult(current.lessonProgress || {}, result), [run, ...current.history]),
       };
     });
   }
 
-  const completedLessons = Object.values(progress.lessonProgress || {}).filter(item => item.passed).length;
+  function completeStory(result) {
+    const { keyStats, ...run } = result;
+    updateProgress(current => {
+      if (current.history.some(item => item.id === run.id)) return current;
+      const storyDrafts = { ...current.storyDrafts };
+      delete storyDrafts[result.storyId];
+      return {
+        ...current,
+        history: [run, ...current.history].slice(0, 500),
+        keyStats: mergeKeyStats(current.keyStats, keyStats),
+        storyProgress: applyStoryResult(current.storyProgress || {}, result),
+        storyDrafts,
+      };
+    });
+  }
+
+  function completeChallenge(result) {
+    const { keyStats, ...run } = result;
+    updateProgress(current => current.history.some(item => item.id === run.id) ? current : { ...current, history: [run, ...current.history].slice(0, 500), keyStats: mergeKeyStats(current.keyStats, keyStats) }, true);
+  }
+
+  function useCustomText(text) {
+    changeSettings({ mode: 'custom', customText: text });
+    setModal(null);
+    resumeWorkspace();
+  }
+
+  function saveStoryDraft(storyId, draft, { flush = false } = {}) {
+    const current = progressRef.current;
+    const storyDrafts = { ...current.storyDrafts };
+    if (draft) storyDrafts[storyId] = draft;
+    else delete storyDrafts[storyId];
+    const next = { ...current, storyDrafts: sanitizeStoryDrafts(storyDrafts, current.storyProgress, current.history) };
+    progressRef.current = next;
+    updateProgress(next);
+    if (flush) persistProgress(next);
+  }
+
+  function saveLessonDraft(lessonId, draft, { flush = false } = {}) {
+    updateProgress(current => {
+      const lessonDrafts = { ...current.lessonDrafts };
+      if (draft) lessonDrafts[lessonId] = draft; else delete lessonDrafts[lessonId];
+      return { ...current, lessonDrafts: sanitizeLessonDrafts(lessonDrafts, current.lessonProgress, current.history) };
+    }, flush);
+  }
+
+  function continueActivity(request) {
+    navigate(request.view);
+    setActivityRequest(request);
+    if (request.view === 'type') {
+      const draft = progressRef.current.workspaceDrafts?.[request.id];
+      if (draft) {
+        updateProgress(current => ({ ...current, settings: { ...current.settings, ...draft.config } }));
+        settingsRef.current = { ...settingsRef.current, ...draft.config };
+        const restored = restoreWorkspaceSession(draft);
+        sessionRef.current = restored; setSession(restored); recordedRef.current = false; setPauseOpen(true);
+      }
+    }
+  }
+
+  function startFreshWorkspace(config) {
+    navigate('type');
+    settingsRef.current = config;
+    updateProgress(current => ({ ...current, settings: config }));
+    reset({ config });
+  }
+
+  function startQuickTest() {
+    const config = { ...settingsRef.current, mode: 'time', duration: 30, punctuation: false, numbers: false };
+    if (progressRef.current.workspaceDrafts?.[category(config)]) setRestartRequest({ config, startFresh: true });
+    else startFreshWorkspace(config);
+  }
+
+  const lessonRecords = Object.values(sanitizeLessonProgress(progress.lessonProgress));
+  const completedLessons = lessonRecords.filter(lessonPracticeComplete).length;
+  const lessonStarted = lessonRecords.some(record => record.attempts > 0 || record.practiceRounds > 0 || record.practiced || record.passed);
   const currentMetrics = metrics(session);
   const finished = session.status === 'finished';
   const running = session.status === 'running';
   const todayRuns = progress.history.filter(run => localDay(new Date(run.date)) === localDay());
   const currentStreak = streak(progress.history);
-  const testHistory = progress.history.filter(run => run.mode === 'time' || run.mode === 'words');
+  const testHistory = progress.history.filter(run => ['time', 'words'].includes(run.mode) && !run.interrupted);
+  const comparisonCategory = testHistory.some(run => run.category === comparison) ? comparison : testHistory[0]?.category || category(settings);
+  const comparableTests = testHistory.filter(run => run.category === comparisonCategory);
+  const sortedSpeeds = comparableTests.map(run => run.wpm).sort((a, b) => a - b);
+  const medianSpeed = sortedSpeeds.length ? (sortedSpeeds[Math.floor((sortedSpeeds.length - 1) / 2)] + sortedSpeeds[Math.floor(sortedSpeeds.length / 2)]) / 2 : 0;
   const best = testHistory.length ? Math.max(...testHistory.map(run => run.wpm)) : null;
   const averageAccuracy = progress.history.length ? Math.round(progress.history.reduce((sum, run) => sum + run.accuracy, 0) / progress.history.length * 10) / 10 : null;
-  const weaknesses = weakKeys(progress.keyStats);
+  const weaknesses = weakKeys(progress.keyStats, 3);
+  const recommendation = getPracticeRecommendation(progress.keyStats);
   const remaining = Math.max(0, Math.ceil(settings.duration - session.elapsed / 1000));
   const completion = settings.mode === 'time' ? session.elapsed / (settings.duration * 1000) : session.typed.length / session.text.length;
-  const sameTests = progress.history.filter(run => run.category === category(settings));
-  const isBest = finished && sameTests.length > 1 && currentMetrics.wpm > Math.max(...sameTests.slice(1).map(run => run.wpm));
+  const sameTests = testHistory.filter(run => run.category === category(settings));
+  const isBest = finished && !session.interrupted && ['time', 'words'].includes(settings.mode) && sameTests.length > 1 && currentMetrics.wpm > Math.max(...sameTests.slice(1).map(run => run.wpm));
   let charOffset = 0;
 
-  return <div className={`app app-shell ${focusMode ? 'focus-mode' : ''}`}>
+  return <div className={`app app-shell ${focusMode ? 'focus-mode' : ''} ${settings.showLiveStats ? '' : 'hide-live-stats'}`} style={{ '--passage-size': `${settings.passageSize}px`, '--passage-line-height': settings.lineHeight }}>
+    <a className="skip-link" href="#main-content">Skip to main content</a>
+    {view === 'type' && !finished && <button className="skip-link skip-practice" onClick={resumeWorkspace}>Return to typing</button>}
     <header className="sidebar">
-      <button className="brand" onClick={() => navigate('type')} aria-label="Typedo home"><span className="brand-mark">t<span /></span><span>Typedo<span className="brand-period">.</span></span></button>
+      <button className="brand" onClick={() => navigate('start')} aria-label="Typedo home"><span className="brand-mark">t<span /></span><span>Typedo<span className="brand-period">.</span></span></button>
       <span className="sidebar-label">WORKSPACE</span>
       <nav className="side-nav" aria-label="Main navigation">
+        <button className={view === 'start' ? 'active' : ''} aria-current={view === 'start' ? 'page' : undefined} onClick={() => navigate('start')}><House size={18} />Start</button>
         <button className={view === 'type' ? 'active' : ''} aria-current={view === 'type' ? 'page' : undefined} onClick={() => navigate('type')}><KeyboardIcon size={18} />Type</button>
         <button className={view === 'lessons' ? 'active' : ''} aria-current={view === 'lessons' ? 'page' : undefined} onClick={() => navigate('lessons')}><BookOpen size={18} />Lessons<span className="nav-count">{LESSON_COURSE.length}</span></button>
+        <button className={view === 'stories' ? 'active' : ''} aria-current={view === 'stories' ? 'page' : undefined} onClick={() => navigate('stories')}><BookOpen size={18} />Stories<span className="nav-count">{STORIES.length}</span></button>
         <button className={view === 'progress' ? 'active' : ''} aria-current={view === 'progress' ? 'page' : undefined} onClick={() => navigate('progress')}><BarChart3 size={18} />Progress</button>
       </nav>
-      <button className="sidebar-course" onClick={() => navigate('lessons')}><span><BookOpen size={14} />TOUCH TYPING</span><strong>{completedLessons} / {LESSON_COURSE.length} lessons passed</strong><small>Continue learning<ArrowRight size={12} /></small></button>
-      <div className="sidebar-bottom">
-        <button aria-label="Settings" onClick={() => setModal('settings')}><Settings2 size={17} />Settings</button>
+      <button className={view === 'library' ? 'library-nav active' : 'library-nav'} onClick={() => navigate('library')}><BookOpen size={17} />Practice library</button>
+      <button className="library-nav" onClick={() => navigate('challenges')}>Personal challenges</button><button className="sidebar-course" onClick={() => navigate('lessons')}><span><BookOpen size={14} />TOUCH TYPING</span><strong>{completedLessons} / {LESSON_COURSE.length} lessons completed</strong><small>Continue learning<ArrowRight size={12} /></small></button>
+      <div className="sidebar-bottom">{onManageProfiles && <button disabled={!storageAvailable} title={storageAvailable ? undefined : "Restore browser saving before switching profiles. Export your current work from Progress."} onClick={onManageProfiles} aria-label="Manage local profiles">Profile: {profileName}</button>}
+        <button aria-label="Settings" onClick={() => openModal('settings')}><Settings2 size={17} />Settings</button>
         <button aria-label={settings.theme === 'dark' ? 'Use light theme' : 'Use dark theme'} onClick={() => changeSettings({ theme: settings.theme === 'light' ? 'dark' : 'light', themeRevision: 2 }, false)}>{settings.theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}{settings.theme === 'dark' ? 'Light mode' : 'Dark mode'}</button>
       </div>
-      <div className="sidebar-local"><span className="tiny-dot" />Local workspace</div>
+      <div className="sidebar-local"><span className="tiny-dot" />{storageAvailable ? 'Saved in this browser' : 'Kept for this visit'}</div>
     </header>
 
-    <main>
-      {warning && <div role="status" className="warning">{warning}<button aria-label="Dismiss storage message" onClick={() => setWarning('')}><X size={16} /></button></div>}
-      {view === 'type' ? <>
-        <section className="intro"><div><div className="eyebrow"><span />TYPING WORKSPACE</div><h1>{settings.mode === 'practice' ? 'Word practice' : settings.mode === 'custom' ? 'Custom text' : 'Typing test'}</h1><p>Build confidence with real words. Keep the finger guide as long as you need it.</p></div><div className="daily-goal"><div className="goal-ring" style={{ '--fill': `${Math.min(1, todayRuns.length / settings.goal) * 360}deg` }}><Leaf size={19} /></div><div><strong>Daily practice</strong><span>{todayRuns.length} of {settings.goal} sessions today <span className="goal-dots">{Array.from({ length: settings.goal }, (_, i) => <i key={i} className={i < todayRuns.length ? 'done' : ''} />)}</span></span></div></div></section>
+    <main id="main-content" tabIndex={-1}>
+      {warning && <div role="status" className="warning">{warning}{typeof recoveryRaw === 'string' && <button className="text-button" onClick={exportOriginalSave}>Download original save</button>}<button aria-label="Dismiss storage message" onClick={() => setWarning('')}><X size={16} /></button></div>}
+      {view === 'start' ? <Start onDiagnostic={() => navigate('diagnostic')} progress={progress} onContinueActivity={continueActivity} onPracticeWeak={practiceWeak} onPracticeLibrary={() => navigate('library')} onSettingsChange={patch => changeSettings(patch, false)} reviewCount={getDueLessonReviews(progress.lessonLearning || {}, progress.lessonProgress || {}).length} hasPractice={hasPractice} lessonStarted={lessonStarted} courseComplete={completedLessons === LESSON_COURSE.length} storageAvailable={storageAvailable} onLessons={() => navigate('lessons')} onTest={startQuickTest} onStories={() => navigate('stories')} onProgress={() => navigate('progress')} onRestore={() => uploadRef.current.click()} /> : view === 'type' ? <>
+        <section className="intro"><div><div className="eyebrow"><span />TYPING WORKSPACE</div><h1>{settings.mode === 'practice' ? 'Word practice' : settings.mode === 'custom' ? 'Custom text' : 'Typing test'}</h1><p>Build confidence with real words. Keep the finger guide as long as you need it.</p></div><div className="daily-goal"><div className="goal-ring" style={{ '--fill': `${Math.min(1, todayRuns.reduce((sum, run) => sum + run.elapsed, 0) / (settings.dailyMinutes * 60000)) * 360}deg` }}><Leaf size={19} /></div><div><strong>Daily practice</strong><span>{Math.floor(todayRuns.reduce((sum, run) => sum + run.elapsed, 0) / 60000)} of {settings.dailyMinutes} minutes today</span></div></div></section>
 
         <div className="workspace-controls"><div className="mode-tabs" aria-label="Typing mode">
           <button aria-pressed={['time', 'words'].includes(settings.mode)} className={['time', 'words'].includes(settings.mode) ? 'selected' : ''} onClick={() => changeSettings({ mode: 'time' })}><Clock3 size={16} />Typing test</button>
           <button aria-pressed={settings.mode === 'practice'} className={settings.mode === 'practice' ? 'selected' : ''} onClick={() => changeSettings({ mode: 'practice' })}><Hand size={16} />Word practice</button>
           <button aria-pressed={settings.mode === 'custom'} className={settings.mode === 'custom' ? 'selected' : ''} onClick={() => changeSettings({ mode: 'custom' })}><Type size={17} />Custom text</button>
-        </div><button className="text-button shortcuts-link" onClick={() => setModal('help')}><CircleHelp size={15} />Shortcuts</button></div>
+        </div><button className="text-button shortcuts-link" onClick={() => openModal('help')}><CircleHelp size={15} />Shortcuts</button></div>
 
         {settings.mode === 'practice' ? <div className="lesson-bar">{LESSONS.map(lesson => <button aria-pressed={settings.lesson === lesson.id} className={settings.lesson === lesson.id ? 'selected' : ''} key={lesson.id} onClick={() => changeSettings({ lesson: lesson.id })}><span>{lesson.badge}</span>{lesson.title}</button>)}</div>
-          : settings.mode === 'custom' ? <div className="config-bar custom-bar"><span><Code2 size={15} />Custom passage</span><button className="text-button" onClick={() => { setCustomDraft(settings.customText); setCustomError(''); setModal('custom'); }}>Edit text<ArrowUpRight size={14} /></button></div>
+          : settings.mode === 'custom' ? <div className="config-bar custom-bar"><span><Code2 size={15} />Custom passage</span><button className="text-button" onClick={() => { setCustomDraft(settings.customText); setCustomError(''); openModal('custom'); }}>Edit text<ArrowUpRight size={14} /></button></div>
           : <TestSetup settings={settings} onChange={changeSettings} />}
 
-        <GuidanceChoice enabled={settings.guide} onChange={guide => { changeSettings({ guide }, false); inputRef.current?.focus({ preventScroll: true }); }} />
+        <GuidanceChoice enabled={settings.guide} onChange={guide => { changeSettings({ guide }, false); }} />
+        <div className="session-actions"><button className="text-button" onClick={resumeWorkspace}>{session.status === 'paused' ? 'Resume typing' : 'Return to typing'}</button>{!finished && <button className="secondary-button" onClick={() => pauseWorkspace()}>Pause <kbd>Esc</kbd></button>}</div>
         <section className={`typing-card ${focused ? 'is-focused' : ''} ${finished ? 'finished' : ''}`} aria-label="Typing workspace">
-          <div className="typing-topline"><span className="language"><span className={`status-dot ${running ? 'running' : ''}`} />{settings.mode === 'practice' ? LESSONS.find(l => l.id === settings.lesson)?.subtitle : 'english'}<span className="subtle-slash">/</span>{finished ? 'session complete' : settings.mode === 'practice' && settings.strict ? 'accuracy first' : modeLabel(settings)}</span><div className="live-metrics"><span><strong>{running || finished ? currentMetrics.wpm : '—'}</strong> wpm</span><span><strong>{running || finished ? currentMetrics.accuracy : '—'}</strong> %</span><span className="timer"><Clock3 size={14} /><strong>{settings.mode === 'time' ? remaining : formatSeconds(session.elapsed / 1000)}</strong>{settings.mode === 'time' && <small>s</small>}</span></div></div>
+          <div className="typing-topline"><span className="language"><span className={`status-dot ${running ? 'running' : ''}`} />{settings.mode === 'practice' ? LESSONS.find(l => l.id === settings.lesson)?.subtitle : 'english'}<span className="subtle-slash">/</span>{finished ? 'session complete' : session.status === 'paused' ? 'paused' : settings.mode === 'practice' && settings.strict ? 'accuracy first' : modeLabel(settings)}</span><div className="live-metrics"><span><strong>{running || finished ? currentMetrics.wpm : '—'}</strong> wpm</span><span><strong>{running || finished ? currentMetrics.accuracy : '—'}</strong> %</span><span className="timer"><Clock3 size={14} /><strong>{settings.mode === 'time' ? remaining : formatSeconds(session.elapsed / 1000)}</strong>{settings.mode === 'time' && <small>s</small>}</span></div></div>
 
-          {finished ? <div className="results" role="status"><div className="result-title"><span className="eyebrow">{isBest ? 'NEW PERSONAL BEST' : 'SESSION RESULT'}</span><h2>{isBest ? 'Personal best' : settings.mode === 'practice' ? 'Practice complete' : 'Test complete'}</h2></div><div className="result-content"><div className="result-score"><strong>{currentMetrics.wpm}</strong><span>words per minute</span></div><div className="result-secondary"><div><strong>{currentMetrics.accuracy}%</strong><span>accuracy</span></div><div><strong>{currentMetrics.raw}</strong><span>raw wpm</span></div><div><strong>{currentMetrics.errors}</strong><span>mistakes</span></div></div><div className="result-chart"><Chart data={session.samples.map(sample => sample.wpm)} /><div><span>your pace</span><span>{(session.elapsed / 1000).toFixed(1)} seconds</span></div></div></div><div className="result-actions"><button className="primary-button" onClick={() => reset()}>Go again<ArrowRight size={16} /></button><button className="secondary-button" onClick={() => reset({ repeat: true })}><RotateCcw size={14} />Repeat text</button>{currentMetrics.errors > 0 && <button className="text-button" onClick={practiceWeak}>Practice weak keys<ArrowUpRight size={15} /></button>}</div></div>
+          {finished ? <div className="results" role="status">{session.interrupted && <p className="interrupted-note">Paused test: practice result. Start a fresh test to set a personal best.</p>}<div className="result-title"><span className="eyebrow">{isBest ? 'NEW PERSONAL BEST' : 'SESSION RESULT'}</span><h2>{isBest ? 'Personal best' : settings.mode === 'practice' ? 'Practice complete' : 'Test complete'}</h2></div><div className="result-content"><div className="result-score"><strong>{currentMetrics.wpm}</strong><span>words per minute</span></div><div className="result-secondary"><div><strong>{currentMetrics.accuracy}%</strong><span>accuracy</span></div><div><strong>{currentMetrics.raw}</strong><span>raw wpm</span></div><div><strong>{currentMetrics.errors}</strong><span>mistakes</span></div></div><div className="result-chart"><Chart data={session.samples.map(sample => sample.wpm)} /><div><span>your pace</span><span>{(session.elapsed / 1000).toFixed(1)} seconds</span></div></div></div><div className="result-actions"><button className="primary-button" ref={restartRef} onClick={() => requestRestart()}>Go again<ArrowRight size={16} /></button><button className="secondary-button" onClick={() => requestRestart({ repeat: true })}><RotateCcw size={14} />Repeat text</button>{currentMetrics.errors > 0 && <button className="text-button" onClick={practiceWeak}>Practice weak keys<ArrowUpRight size={15} /></button>}</div></div>
           : <div className={settings.guide ? 'coached-workspace' : ''}><div className={`typing-surface ${!focused && running ? 'unfocused' : ''}`} onClick={() => inputRef.current?.focus({ preventScroll: true })}>
             <div className="words-window" ref={wordsRef} aria-hidden="true"><div className="words-text">{session.text.split(' ').map((word, wordIndex, words) => {
               const start = charOffset;
@@ -287,35 +480,58 @@ export default function App() {
                 return <span key={charIndex} ref={active ? caretRef : undefined} className={`char ${typed !== undefined ? typed === char ? 'correct' : 'incorrect' : ''} ${active ? 'current' : ''} ${active && session.lastWrong ? 'wrong-flash' : ''}`}>{char}</span>;
               })}</span>;
             })}</div></div>
-            <textarea ref={inputRef} className="typing-input" aria-label="Typing input" aria-describedby="typing-instructions accessible-prompt" value="" onChange={() => {}} onKeyDown={handleKey} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)} onPaste={event => { event.preventDefault(); setNotice('Type the text yourself. Paste is disabled during a session.'); }} onDrop={event => event.preventDefault()} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} inputMode="none" />
+            <textarea ref={inputRef} className="typing-input" aria-label="Typing input" aria-describedby="typing-instructions accessible-prompt" value="" onChange={() => {}} onKeyDown={handleKey} onFocus={() => setFocused(true)} onBlur={() => { setFocused(false); if (['time', 'words'].includes(settingsRef.current.mode) && sessionRef.current.status === 'running') pauseWorkspace(false); }} onPaste={event => { event.preventDefault(); setNotice('Type the text yourself. Paste is disabled during a session.'); }} onDrop={event => event.preventDefault()} autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} inputMode="none" />
             <p id="accessible-prompt" className="sr-only">Text to type: {session.text}</p>
-            {!focused && running && <div className="focus-prompt"><KeyboardIcon size={18} />Click to focus. The timer is still running.</div>}
+            {!focused && !finished && <div className="focus-prompt"><button className="primary-button" onClick={resumeWorkspace}>Return to typing</button></div>}
           </div>{settings.guide && <TypingCoach next={session.text[session.typed.length]} />}</div>}
           {settings.mode === 'practice' && <WordProgress text={session.text} typed={session.typed} />}
 
-          <div className="typing-bottomline"><span id="typing-instructions">{capsLock && !finished ? <span className="caps-warning">Caps Lock is on</span> : finished ? <><ShieldCheck size={14} />{storageAvailable ? 'Progress saved in this browser' : 'Session complete · export to keep it'}</> : running ? settings.mode === 'practice' && settings.strict ? 'Take your time. Correct each key to continue.' : 'Timer running. Backspace to correct a character.' : <><span className="mini-caret" />{focused ? 'Start typing to begin' : 'Click the text to begin'}<span className="desktop-note"> · use a physical keyboard</span></>}</span><div><button className="icon-button" aria-label={settings.sound ? 'Mute key sounds' : 'Enable key sounds'} onClick={() => changeSettings({ sound: !settings.sound }, false)}>{settings.sound ? <Volume2 size={16} /> : <VolumeX size={16} />}</button><button className="icon-button focus-button" aria-label={focusMode ? 'Exit focus mode' : 'Enter focus mode'} onClick={() => setFocusMode(!focusMode)}><Target size={16} /></button><button className="restart-button" ref={restartRef} onClick={() => reset()} title="Restart (Tab, then Enter, or Ctrl+Enter)"><RotateCcw size={16} />Restart</button></div></div>
+          <div className="typing-bottomline"><span id="typing-instructions">{capsLock && !finished ? <span className="caps-warning">Caps Lock is on</span> : finished ? <><ShieldCheck size={14} />{storageAvailable ? 'Progress saved in this browser' : 'Session complete · export to keep it'}</> : running ? settings.mode === 'practice' && settings.strict ? 'Take your time. Correct each key to continue.' : 'Timer running. Backspace to correct a character.' : <><span className="mini-caret" />{session.status === 'paused' ? 'Paused. Choose Resume typing when ready.' : focused ? 'Start typing to begin' : 'Use Return to typing to begin'}<span className="desktop-note"> · use a physical keyboard</span></>}</span><div><button className="icon-button" aria-label={settings.sound ? 'Mute key sounds' : 'Enable key sounds'} onClick={() => changeSettings({ sound: !settings.sound }, false)}>{settings.sound ? <Volume2 size={16} /> : <VolumeX size={16} />}</button><button className="icon-button focus-button" aria-label={focusMode ? 'Exit focus mode' : 'Enter focus mode'} onClick={() => setFocusMode(!focusMode)}><Target size={16} /></button><button className="restart-button" ref={finished ? undefined : restartRef} onClick={() => requestRestart()} aria-keyshortcuts="Shift+Enter" title="Restart (Shift+Enter)"><RotateCcw size={16} />Restart</button></div></div>
           <div className="typing-progress"><div style={{ width: `${Math.min(100, completion * 100)}%` }} /></div>
         </section>
-        <div className="under-test"><div>{!finished && <><kbd>tab</kbd><span>+</span></>}<kbd>enter</kbd><span>restart</span><i /><kbd>esc</kbd><span>reset</span></div>{!settings.guide ? <button className="text-button" onClick={() => changeSettings({ guide: true }, false)}><KeyboardIcon size={14} />Show finger guide</button> : <span className="gentle-hint"><Leaf size={13} />Focus on accuracy before speed.</span>}</div>
+        <div className="under-test"><div><kbd>Esc</kbd><span>pause</span><i /><kbd>Shift</kbd> + <kbd>Enter</kbd><span>retry</span><i /><kbd>Backspace</kbd><span>correct</span></div>{!settings.guide ? <button className="text-button" onClick={() => changeSettings({ guide: true }, false)}>Show finger guide</button> : <span className="gentle-hint">Focus on accuracy before speed.</span>}</div>
 
         {settings.guide && !finished && <details className="keyboard-reference"><summary>Need the whole keyboard? Open key map</summary><Keyboard next={session.text[session.typed.length]} running={running} finished={finished} /></details>}
-        {settings.mode === 'practice' && <div className="practice-note"><Hand size={16} /><span>{settings.lesson === 'weak' && !weaknesses.length ? 'Your weak keys will appear after a completed session. Start with the home row.' : 'The guide teaches finger placement. Your keyboard cannot report which finger you use.'}</span><button className="text-button" onClick={() => changeSettings({ strict: !settings.strict })}>{settings.strict ? '✓' : '○'} Wait for correct key</button></div>}
+        {settings.mode === 'practice' && <div className="practice-note"><Hand size={16} /><span>{settings.lesson === 'weak' && !weaknesses.length ? 'Keep practicing. A few completed sessions help us choose which keys need attention.' : 'The guide teaches finger placement. Your keyboard cannot report which finger you use.'}</span><button className="text-button" onClick={() => changeSettings({ strict: !settings.strict })}>{settings.strict ? '✓' : '○'} Wait for correct key</button></div>}
 
-        <section className="lesson-entry"><div><BookOpen size={20} /><div><strong>Learn touch typing</strong><p>Eight lessons with finger guidance and a separate test for each.</p></div></div><button onClick={() => navigate('lessons')}>Open lessons<ArrowRight size={15} /></button></section>
+        {recommendation && <section className="lesson-entry practice-recommendation" aria-label="Suggested practice"><div><Target size={20} /><div><strong>{recommendation.title}</strong><p>{recommendation.description}</p><div className="recommendation-keys">{recommendation.keys.map(item => <kbd key={item.key} aria-label={`${item.key} key`}>{item.key}</kbd>)}</div></div></div>{settings.mode === 'practice' && settings.lesson === 'weak' ? <span className="recommendation-active">Practicing these keys</span> : <button onClick={practiceWeak}>Practice these keys<ArrowRight size={15} /></button>}</section>}
+        <section className="lesson-entry"><div><BookOpen size={20} /><div><strong>Learn touch typing</strong><p>Short guided rounds that move forward. Accuracy tests are optional.</p></div></div><button onClick={() => navigate('lessons')}>Open lessons<ArrowRight size={15} /></button></section>
+        <section className="lesson-entry"><div><BookOpen size={20} /><div><strong>Type a story</strong><p>Original comedies, one short chapter at a time.</p></div></div><button onClick={() => navigate('stories')}>Open stories<ArrowRight size={15} /></button></section>
         <div className="bottom-stats"><div><span className="stat-icon"><Flame size={18} /></span><div><strong>{currentStreak} day{currentStreak !== 1 ? 's' : ''}</strong><span>current streak</span></div></div><div><span className="stat-icon"><Award size={18} /></span><div><strong>{best === null ? 'No personal best yet' : `${best} wpm`}</strong><span>{best === null ? 'complete a test to set your best' : 'personal best · all tests'}</span></div></div><button onClick={() => navigate('progress')}><span className="stat-icon"><Activity size={18} /></span><div><strong>Session history</strong><span>{progress.history.length} completed session{progress.history.length !== 1 ? 's' : ''}</span></div><ArrowUpRight size={18} /></button></div>
-      </> : view === 'lessons' ? <Lessons guideEnabled={settings.guide} onGuideChange={guide => changeSettings({ guide }, false)} lessonProgress={progress.lessonProgress || {}} onComplete={completeLesson} onBack={() => navigate('type')} /> : <>
-        <section className="intro progress-intro"><div><button className="text-button back-link" onClick={() => navigate('type')}><ArrowLeft size={15} />Back to typing</button><h1>Your progress</h1><p>Review completed sessions and the keys you miss most.</p></div><div className="backup-buttons"><button className="secondary-button" onClick={exportProgress}><ArrowDownToLine size={15} />Export</button><button className="secondary-button" onClick={() => uploadRef.current.click()}><Upload size={15} />Restore</button><input ref={uploadRef} className="sr-only" type="file" accept=".json,application/json" onChange={importProgress} /></div></section>
+      </> : view === 'lessons' ? <Lessons initialPracticeKind={activityRequest?.review ? 'review' : 'lesson'} initialLessonId={activityRequest?.view === 'lessons' ? activityRequest.id : undefined} lessonDrafts={progress.lessonDrafts || {}} onDraftChange={saveLessonDraft} storageAvailable={storageAvailable} suspended={Boolean(modal) || externalSuspended} lessonLearning={progress.lessonLearning || {}} keyStats={progress.keyStats} lessonTheme={settings.lessonTheme} lessonLength={settings.lessonLength} onPreferencesChange={patch => changeSettings(patch, false)} onStop={() => navigate('start')} guideEnabled={settings.guide} onGuideChange={guide => changeSettings({ guide }, false)} lessonProgress={progress.lessonProgress || {}} onComplete={completeLesson} onBack={() => navigate('type')} onStories={() => navigate('stories')} /> : view === 'stories' ? <Stories initialStoryId={activityRequest?.view === 'stories' ? activityRequest.id : undefined} suspended={Boolean(modal) || externalSuspended} storyDrafts={progress.storyDrafts || {}} onDraftChange={saveStoryDraft} storageAvailable={storageAvailable} guideEnabled={settings.guide} onGuideChange={guide => changeSettings({ guide }, false)} storyProgress={progress.storyProgress || {}} onComplete={completeStory} onBack={() => navigate('start')} /> : view === 'challenges' ? <Challenges initialChallenge={sharedChallenge} history={progress.history} onComplete={completeChallenge} onBack={() => navigate('start')} suspended={Boolean(modal) || externalSuspended} /> : view === 'diagnostic' ? <Diagnostic onChooseLesson={id => continueActivity({ view: 'lessons', id })} onBack={() => navigate('start')} suspended={Boolean(modal) || externalSuspended} /> : view === 'library' ? <PracticeLibrary passages={progress.savedPassages || []} onSave={savedPassages => updateProgress(current => ({ ...current, savedPassages: sanitizeSavedPassages(savedPassages) }))} onUse={(text, title) => { navigate('type'); useCustomText(text); setNotice(`Ready to practice: ${title}`); requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true })); }} /> : <>
+        <section className="intro progress-intro"><div><button className="text-button back-link" onClick={() => navigate('type')}><ArrowLeft size={15} />Back to typing</button><h1 tabIndex={-1}>Your progress</h1><p>Review completed sessions and the keys you miss most.</p></div><div className="backup-buttons"><button className="secondary-button" onClick={exportProgress}><ArrowDownToLine size={15} />Export</button><button className="secondary-button" onClick={() => uploadRef.current.click()}><Upload size={15} />Restore</button></div></section>
         <div className="progress-stats">{[{ icon: Award, value: best === null ? '—' : best, unit: 'wpm', title: 'Best test speed' }, { icon: Target, value: averageAccuracy === null ? '—' : averageAccuracy, unit: '%', title: 'Average accuracy' }, { icon: KeyboardIcon, value: progress.history.length, unit: '', title: 'Sessions completed' }, { icon: Flame, value: currentStreak, unit: 'days', title: 'Current streak' }].map(({ icon: Icon, value, unit, title }) => <div key={title}><Icon size={19} /><strong>{value}<small>{unit}</small></strong><span>{title}</span></div>)}</div>
-        <div className="progress-columns"><section className="panel"><div className="section-heading"><h2>Your typing pace</h2><span>last 20 tests</span></div>{testHistory.length ? <><Chart data={testHistory.slice(0, 20).reverse().map(run => run.wpm)} height={160} /><div className="chart-labels"><span>older</span><span>latest</span></div><p className="panel-note">Test speeds include different durations and word counts.</p></> : <div className="empty-chart"><Activity size={28} /><h3>No test results yet</h3><p>Finish a typing test to see your pace here.</p><button className="text-button" onClick={() => { navigate('type'); changeSettings({ mode: 'time' }); }}>Take a test<ArrowRight size={15} /></button></div>}</section><section className="panel weak-panel"><div className="section-heading"><h2>Keys to practice</h2><Sparkles size={17} /></div>{weaknesses.length ? <><p>These keys could use some attention.</p><div className="weak-keys">{weaknesses.map(item => <div key={item.key}><kbd>{item.key}</kbd><span>{Math.round((1 - item.errors / item.attempts) * 100)}%</span></div>)}</div><button className="primary-button" onClick={practiceWeak}>Practice these keys<ArrowRight size={15} /></button></> : <><div className="weak-empty"><Hand size={34} /><p>Finish a session and we’ll find the keys worth practicing.</p></div><button className="secondary-button" onClick={practiceWeak}>Try finger practice<ArrowRight size={15} /></button></>}</section></div>
-        <section className="panel history-panel"><div className="section-heading"><h2>Session history</h2><span>{progress.history.length} / 500 saved</span></div>{progress.history.length ? <div className="history-scroll"><table><thead><tr><th>Session</th><th>Speed</th><th>Accuracy</th><th>Mistakes</th><th>When</th></tr></thead><tbody>{progress.history.slice(0, 50).map(run => <tr key={run.id}><td><span className={`mode-dot ${run.mode}`} />{run.label}</td><td><strong>{run.wpm}</strong><span className="table-unit"> wpm</span></td><td>{run.accuracy}%</td><td>{run.errors}</td><td>{new Date(run.date).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td></tr>)}</tbody></table>{progress.history.length > 50 && <p className="panel-note">Showing the latest 50 sessions. Your export includes all saved sessions.</p>}</div> : <div className="empty-history"><KeyboardIcon size={26} /><p>No sessions yet. Start with thirty seconds.</p></div>}</section>
+        <div className="progress-columns"><section className="panel"><div className="section-heading"><h2>Your typing pace</h2><span>{comparableTests.length} comparable tests</span></div>{testHistory.length ? <><label className="comparison-control">Compare the same test<select value={comparisonCategory} onChange={event => setComparison(event.target.value)}>{[...new Map(testHistory.map(run => [run.category, run])).values()].map(run => <option key={run.category} value={run.category}>{run.label} · {run.category.split(':')[2] === 'true' ? 'with punctuation' : 'no punctuation'} · {run.category.split(':')[3] === 'true' ? 'with numbers' : 'no numbers'}</option>)}</select></label><Chart data={comparableTests.slice(0, 20).reverse().map(run => run.wpm)} height={160} /><div className="chart-labels"><span>older</span><span>latest</span></div><p className="panel-note">Same format and settings. Paused attempts are excluded. Typical speed: {medianSpeed} wpm.</p></> : <div className="empty-chart"><Activity size={28} /><h3>No test results yet</h3><p>Finish a typing test to see your pace here.</p><button className="text-button" onClick={() => { navigate('type'); changeSettings({ mode: 'time' }); }}>Take a test<ArrowRight size={15} /></button></div>}</section><section className="panel weak-panel"><div className="section-heading"><h2>Keys to practice</h2><Sparkles size={17} /></div>{weaknesses.length ? <><p>These keys could use some attention.</p><div className="weak-keys">{weaknesses.map(item => <div key={item.key}><kbd>{item.key}</kbd><span>{Math.round((1 - item.errors / item.attempts) * 100)}%</span></div>)}</div><button className="primary-button" onClick={practiceWeak}>Practice these keys<ArrowRight size={15} /></button></> : <><div className="weak-empty"><Hand size={34} /><p>Finish a session and we’ll find the keys worth practicing.</p></div><button className="secondary-button" onClick={practiceWeak}>Try finger practice<ArrowRight size={15} /></button></>}</section></div>
+        <section className="panel history-panel"><div className="section-heading"><h2>Session history</h2><span>{progress.history.length} / 500 saved</span></div>{progress.history.length ? <div className="history-scroll"><table><thead><tr><th>Session</th><th>Speed</th><th>Accuracy</th><th>Mistakes</th><th>When</th></tr></thead><tbody>{progress.history.slice(0, 50).map(run => <tr key={run.id}><td><span className={`mode-dot ${run.mode}`} />{run.label}{run.interrupted && <span className="history-interrupted">Paused practice</span>}</td><td><strong>{run.wpm}</strong><span className="table-unit"> wpm</span></td><td>{run.accuracy}%</td><td>{run.errors}</td><td>{new Date(run.date).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td></tr>)}</tbody></table>{progress.history.length > 50 && <p className="panel-note">Showing the latest 50 sessions. Your export includes all saved sessions.</p>}</div> : <div className="empty-history"><KeyboardIcon size={26} /><p>No sessions yet. Start with thirty seconds.</p></div>}</section>
         <div className="storage-note"><ShieldCheck size={17} /><p>Your progress stays in this browser. Export a backup before clearing browser data or switching devices. Restoring merges results and keeps the larger per-key totals.</p></div>
       </>}
     </main>
-    <footer><span><span className="footer-mark">k.</span> Typing workspace</span><div><span><span className="tiny-dot" />{storageAvailable ? 'Saved locally' : 'Session only'}</span><button onClick={() => setModal('help')}>Keyboard shortcuts<ArrowUpRight size={13} /></button></div></footer>
+    <input ref={uploadRef} hidden type="file" accept=".json,application/json" onChange={importProgress} aria-label="Restore a Typedo backup" />
+    <footer><span><span className="footer-mark">t.</span> Typing workspace</span><div><span><span className="tiny-dot" />{storageAvailable ? 'Saved locally' : 'Session only'}</span><button onClick={() => openModal('help')}>Keyboard shortcuts<ArrowUpRight size={13} /></button></div></footer>
 
     {notice && <div className="toast" role="status">{notice}<button aria-label="Dismiss notification" onClick={() => setNotice('')}><X size={15} /></button></div>}
-    {modal === 'settings' && <Modal title="Workspace settings" onClose={() => setModal(null)}><p className="modal-description">Appearance, sound, and practice preferences.</p><Toggle checked={settings.theme === 'dark'} onChange={value => changeSettings({ theme: value ? 'dark' : 'light' }, false)}>Dark theme</Toggle><Toggle checked={settings.guide} onChange={value => changeSettings({ guide: value }, false)}>Show the finger guide</Toggle><Toggle checked={settings.sound} onChange={value => changeSettings({ sound: value }, false)}>Gentle key sounds</Toggle><Toggle checked={settings.strict} onChange={value => changeSettings({ strict: value })}>Wait for the correct key in practice</Toggle><div className="settings-goal"><span>Daily session goal</span><div>{[3, 5, 10].map(goal => <button aria-pressed={settings.goal === goal} className={settings.goal === goal ? 'selected' : ''} key={goal} onClick={() => changeSettings({ goal }, false)}>{goal}</button>)}</div></div><p className="panel-note">Settings and up to 500 completed sessions are saved on this browser. No account needed.</p><button className="primary-button full-width" onClick={() => setModal(null)}>Back to typing<ArrowRight size={16} /></button></Modal>}
-    {modal === 'help' && <Modal title="Keyboard shortcuts" onClose={() => setModal(null)}><div className="shortcut-list"><div><span>Restart from the typing area</span><span><kbd>tab</kbd> <kbd>enter</kbd></span></div><div><span>Restart from anywhere</span><span><kbd>ctrl / ⌘</kbd> <kbd>enter</kbd></span></div><div><span>Reset and leave focus mode</span><kbd>esc</kbd></div><div><span>Correct your last character</span><kbd>backspace</kbd></div></div><h3>Finger placement</h3><p>Rest your fingers on A S D F and J K L ;. The bumps on F and J help you find home without looking. Use either thumb for space and the opposite hand for Shift.</p><p>WPM counts correct characters, including spaces, divided by five and by elapsed minutes. Accuracy counts every attempt, including corrected mistakes. The timer starts on your first character and keeps running if you leave the tab.</p><p className="panel-note">Designed for a physical keyboard with a US QWERTY finger guide. Paste, held-key repeats, and composed input are excluded from tests. The guide recommends fingers; it cannot detect which one you use.</p></Modal>}
-    {modal === 'custom' && <Modal title="Custom practice text" onClose={() => setModal(null)}><p className="modal-description">Practice a passage, a tricky sentence, or a few lines of code.</p><label className="custom-label" htmlFor="custom-text">Practice text <span>{customDraft.length} / 1,500</span></label><textarea id="custom-text" className="custom-editor" value={customDraft} maxLength={1500} onChange={event => setCustomDraft(event.target.value)} placeholder="Type or paste your practice text here…" /><p className="panel-note">Use English letters, numbers, and standard keyboard punctuation. Line breaks become spaces.</p>{customError && <p role="alert" className="form-error">{customError}</p>}<button className="primary-button full-width" onClick={() => { if (!customDraft.trim()) { setCustomError('Add text to practice first.'); return; } if (/[^\x20-\x7e\n\r\t]/.test(customDraft)) { setCustomError('Use standard keyboard characters. Replace curly quotes, accented letters, or emoji.'); return; } changeSettings({ customText: customDraft }); setModal(null); }}>Use this text<ArrowRight size={16} /></button></Modal>}
+    {pauseOpen && !modal && !externalSuspended && !restartRequest && view === 'type' && <PauseDialog onResume={resumeWorkspace} onFinish={() => navigate('start')} onRestart={() => requestRestart()} interrupted={session.interrupted} storageAvailable={storageAvailable} />}
+    {restartRequest && !externalSuspended && <ConfirmRestart description={restartRequest.startFresh ? "Start a fresh 30-second test? This replaces your unfinished test with these settings. Completed results stay saved." : undefined} onCancel={() => { setRestartRequest(null); if (!restartRequest.startFresh) resumeWorkspace(); }} onConfirm={() => { const options = restartRequest; setRestartRequest(null); if (options.startFresh) startFreshWorkspace(options.config); else reset(options); }} />}
+    {modal === 'settings' && <Modal title="Practice settings" onClose={() => setModal(null)}>
+      <p className="modal-description">Make the text comfortable and choose a manageable goal.</p>
+      <Toggle checked={settings.theme === 'dark'} onChange={value => changeSettings({ theme: value ? 'dark' : 'light' }, false)}>Dark theme</Toggle>
+      <Toggle checked={settings.guide} onChange={value => changeSettings({ guide: value }, false)}>Show the finger guide</Toggle>
+      <Toggle checked={settings.sound} onChange={value => changeSettings({ sound: value }, false)}>Key sounds</Toggle>
+      <Toggle checked={settings.showLiveStats} onChange={value => changeSettings({ showLiveStats: value }, false)}>Show speed while typing</Toggle>
+      <Toggle checked={settings.strict} onChange={value => changeSettings({ strict: value })}>Correct each key before continuing in practice</Toggle>
+      <div className="reading-settings"><label>Passage text size<select value={settings.passageSize} onChange={event => changeSettings({ passageSize: Number(event.target.value) }, false)}>{[24, 28, 32].map(size => <option key={size} value={size}>{size}px</option>)}</select></label>
+      <label>Line spacing<select value={settings.lineHeight} onChange={event => changeSettings({ lineHeight: Number(event.target.value) }, false)}><option value={1.6}>Compact</option><option value={1.9}>Comfortable</option><option value={2.2}>Spacious</option></select></label>
+      <label>Daily practice<select value={settings.dailyMinutes} onChange={event => changeSettings({ dailyMinutes: Number(event.target.value) }, false)}>{[3, 5, 10].map(value => <option key={value} value={value}>{value} minutes</option>)}</select></label>
+      <label>Weekly practice days<select value={settings.weeklyDays} onChange={event => changeSettings({ weeklyDays: Number(event.target.value) }, false)}>{[1,2,3,4,5,6,7].map(value => <option key={value} value={value}>{value} days</option>)}</select></label></div>
+      <p className="panel-note">Progress stays in this browser. A missed day never removes completed work.</p><button data-autofocus className="primary-button full-width" onClick={() => setModal(null)}>Done<ArrowRight size={16} /></button>
+    </Modal>}
+    {modal === 'help' && <Modal title="Keyboard shortcuts" onClose={() => setModal(null)}><div className="shortcut-list">
+      <div><span>Pause an exercise</span><kbd>Esc</kbd></div><div><span>Move between controls</span><span><kbd>Tab</kbd> / <kbd>Shift + Tab</kbd></span></div><div><span>Activate the focused action</span><kbd>Enter</kbd></div><div><span>Retry from typing or a result</span><kbd>Shift + Enter</kbd></div><div><span>Correct the previous character</span><kbd>Backspace</kbd></div></div>
+      <p>Start or Continue puts you in the typing area. Pause keeps your exact place. Choose Resume typing to return; the next character starts the clock. Restart asks before clearing unfinished work.</p><p>Ctrl/Command+Enter also restarts free typing. In lessons it retries while typing and continues from a completed block. It does not restart stories.</p>
+      <h3>Finger placement</h3><p>Rest your fingers on A S D F and J K L ;. The bumps on F and J help you find home. Use either thumb for space and the opposite hand for Shift.</p>
+      <details><summary>How scoring works</summary><p>Words per minute uses correct characters, including spaces, divided by five and by active elapsed minutes. Accuracy counts every attempt, including mistakes you corrected. Reading and thinking time count while the exercise is running.</p><p>Leaving a test or pausing it makes that attempt practice. It cannot set a personal best or pass an assessment. Your earlier results stay saved.</p></details>
+      <p className="panel-note">Use a physical keyboard. The finger guide follows US QWERTY. Paste, held-key repeats, and composed input are excluded from exercises. The app cannot detect which finger pressed a key.</p>
+    </Modal>}
+    {modal === 'custom' && <Modal title="Custom practice text" onClose={() => setModal(null)}><p className="modal-description">Practice a passage, a tricky sentence, or a few lines of code.</p><label className="custom-label" htmlFor="custom-text">Practice text <span>{customDraft.length} / 1,500</span></label><textarea id="custom-text" className="custom-editor" value={customDraft} maxLength={1500} onChange={event => setCustomDraft(event.target.value)} placeholder="Type or paste your practice text here…" /><p className="panel-note">Use English letters, numbers, and standard keyboard punctuation. Line breaks become spaces.</p>{customError && <p role="alert" className="form-error">{customError}</p>}<button className="primary-button full-width" onClick={() => { if (!customDraft.trim()) { setCustomError('Add text to practice first.'); return; } if (/[^\x20-\x7e\n\r\t]/.test(customDraft)) { setCustomError('Use standard keyboard characters. Replace curly quotes, accented letters, or emoji.'); return; } useCustomText(customDraft); }}>Use this text<ArrowRight size={16} /></button></Modal>}
   </div>;
 }
