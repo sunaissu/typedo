@@ -19,7 +19,7 @@ import TestSetup from './TestSetup.jsx';
 import { LESSON_COURSE, applyLessonResult, lessonPracticeComplete, sanitizeLessonProgress } from './lessons.js';
 import { applyLessonLearningResult, getDueLessonReviews } from './lessonLearning.js';
 import { LESSONS, createSession, enterKey, generateText, getPracticeRecommendation, localDay, mergeKeyStats, metrics, pauseSession, resumeSession, streak, tick, weakKeys } from './typing.js';
-import { DEFAULT_SETTINGS, STORAGE_KEY, discardedDraftsNotice, emptyProgress, mergeProgress, readProgress, validateProgress, writeProgress } from './storage.js';
+import { STORAGE_KEY, discardedDraftsNotice, emptyProgress, mergeProgress, readProgress, validateProgress, writeProgress } from './storage.js';
 
 function initialData(storageKey) {
   try { return readProgress(window.localStorage, storageKey); }
