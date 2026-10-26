@@ -1,3 +1,5 @@
+import { browserStorage } from './browserStorage.js';
+
 export const PROFILE_METADATA_KEY = 'typedo:profiles:v1';
 export const MAX_PROFILES = 8;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -33,11 +35,10 @@ export function validateProfiles(value) {
   return { version: 1, activeId: value.activeId.toLowerCase(), profiles };
 }
 
-export function readProfiles(storage) {
+export async function readProfiles(storage = browserStorage) {
   let raw = null;
   try {
-    const availableStorage = storage ?? window.localStorage;
-    raw = availableStorage.getItem(PROFILE_METADATA_KEY);
+    raw = await storage.getItem(PROFILE_METADATA_KEY);
     if (raw === null) return { data: defaultProfiles(), raw, writable: true, error: '' };
     return { data: validateProfiles(JSON.parse(raw)), raw, writable: true, error: '' };
   } catch {
@@ -46,15 +47,15 @@ export function readProfiles(storage) {
   }
 }
 
-export function writeProfiles(value, expectedRaw, storage) {
+export async function writeProfiles(value, expectedRaw, storage = browserStorage, options = {}) {
   const data = validateProfiles(value);
   try {
-    const availableStorage = storage ?? window.localStorage;
-    if (availableStorage.getItem(PROFILE_METADATA_KEY) !== expectedRaw) {
+    const raw = JSON.stringify(data);
+    const result = await storage.compareAndSet(PROFILE_METADATA_KEY, expectedRaw, raw, options);
+    if (result === 'conflict') {
       return { ok: false, conflict: true, error: 'The profile list changed in another tab. Review the list and try again.' };
     }
-    const raw = JSON.stringify(data);
-    availableStorage.setItem(PROFILE_METADATA_KEY, raw);
+    if (result === 'occupied') return { ok: false, conflict: false, error: 'That profile could not be created. Try again.' };
     return { ok: true, data, raw };
   } catch {
     return { ok: false, conflict: false, error: 'Could not save the profile list. Your current profile is still open.' };

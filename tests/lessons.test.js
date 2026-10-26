@@ -231,13 +231,13 @@ test('malformed lesson backups cannot introduce unknown lessons or invalid progr
   assert.deepEqual(clean[lessonId], { practiced: false, practiceRounds: 0, passed: false, bestAccuracy: 100, bestWpm: 0, attempts: 0, lastPracticed: '', seenPractice: [], seenTests: [] });
 });
 
-test('lesson history and completion survive local storage and exported backup validation', () => {
+test('lesson history and completion survive local storage and exported backup validation', async () => {
   const run = result();
   const progress = { ...emptyProgress(), history: [run], lessonProgress: applyLessonResult({}, run) };
   let saved;
   const storage = { setItem: (_, value) => { saved = value; }, getItem: () => saved };
-  assert.equal(writeProgress(storage, progress), '');
-  const reloaded = readProgress(storage);
+  assert.equal((await writeProgress(storage, progress)), '');
+  const reloaded = (await readProgress(storage));
   assert.equal(reloaded.warning, '');
   assert.deepEqual(reloaded.progress.lessonProgress, progress.lessonProgress);
   assert.deepEqual(reloaded.progress.history, [run]);

@@ -15,12 +15,12 @@ const draft = {
   elapsed: 12345, updatedAt: '2026-10-22T10:00:00.000Z',
 };
 
-test('story history and bookmarks survive app storage and exported backup validation', () => {
+test('story history and bookmarks survive app storage and exported backup validation', async () => {
   const progress = { ...emptyProgress(), history: [result], storyProgress: applyStoryResult({}, result) };
   let saved;
   const storage = { setItem: (_, value) => { saved = value; }, getItem: () => saved };
-  assert.equal(writeProgress(storage, progress), '');
-  const reloaded = readProgress(storage);
+  assert.equal((await writeProgress(storage, progress)), '');
+  const reloaded = (await readProgress(storage));
   assert.equal(reloaded.warning, '');
   assert.deepEqual(reloaded.progress.history, [result]);
   assert.deepEqual(reloaded.progress.storyProgress, progress.storyProgress);
@@ -43,12 +43,12 @@ test('backup history rejects unknown stories and invalid chapter indexes while o
   assert.deepEqual(validateProgress(backup).storyProgress, {}, 'A backup made before Stories remains usable');
 });
 
-test('partial story drafts round trip without counting unfinished typing as completed progress', () => {
+test('partial story drafts round trip without counting unfinished typing as completed progress', async () => {
   const progress = { ...emptyProgress(), storyDrafts: { [story.id]: draft } };
   let saved;
   const storage = { setItem: (_, value) => { saved = value; }, getItem: () => saved };
-  assert.equal(writeProgress(storage, progress), '');
-  const reloaded = readProgress(storage);
+  assert.equal((await writeProgress(storage, progress)), '');
+  const reloaded = (await readProgress(storage));
   assert.equal(reloaded.warning, '');
   assert.deepEqual(reloaded.progress.storyDrafts, { [story.id]: draft });
   assert.deepEqual(reloaded.progress.history, []);

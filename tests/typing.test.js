@@ -3,20 +3,20 @@ import assert from 'node:assert/strict';
 import { createSession, enterKey, generateText, keyGuide, metrics, tick, weakKeys } from '../src/typing.js';
 import { DEFAULT_SETTINGS, emptyProgress, readProgress, validateProgress, writeProgress } from '../src/storage.js';
 
-test('Typedo loads legacy progress and saves under its new name', () => {
+test('Typedo loads legacy progress and saves under its new name', async () => {
   const legacy = emptyProgress();
   legacy.settings.goal = 10;
   const data = new Map([['keysteady:v1', JSON.stringify(legacy)]]);
   const storage = { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) };
-  const loaded = readProgress(storage);
+  const loaded = (await readProgress(storage));
   assert.equal(loaded.warning, '');
   assert.equal(loaded.progress.settings.goal, 10);
-  assert.equal(writeProgress(storage, loaded.progress), '');
+  assert.equal((await writeProgress(storage, loaded.progress)), '');
   assert.equal(JSON.parse(data.get('typedo:v1')).settings.goal, 10);
   const current = emptyProgress();
   current.settings.goal = 3;
-  writeProgress(storage, current);
-  assert.equal(readProgress(storage).progress.settings.goal, 3);
+  (await writeProgress(storage, current));
+  assert.equal((await readProgress(storage)).progress.settings.goal, 3);
   assert.ok(data.has('keysteady:v1'));
 });
 
@@ -221,10 +221,10 @@ test('weak keys are ranked by error rate and exclude space', () => {
   assert.deepEqual(result.map(item => item.key), ['f', 'a']);
 });
 
-test('corrupt or denied storage does not prevent startup or typing', () => {
-  assert.equal(readProgress({ getItem: () => '{bad' }).progress.version, 1);
-  assert.ok(readProgress({ getItem: () => { throw new Error('Denied'); } }).warning);
-  assert.ok(writeProgress({ setItem: () => { throw new Error('Full'); } }, emptyProgress()));
+test('corrupt or denied storage does not prevent startup or typing', async () => {
+  assert.equal((await readProgress({ getItem: () => '{bad' })).progress.version, 1);
+  assert.ok((await readProgress({ getItem: () => { throw new Error('Denied'); } })).warning);
+  assert.ok((await writeProgress({ setItem: () => { throw new Error('Full'); } }, emptyProgress())));
 });
 
 test('backup validation rejects unsupported versions and filters unsafe settings', () => {

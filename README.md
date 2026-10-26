@@ -55,13 +55,19 @@ WPM = currently correct characters, including spaces, divided by five and by ela
 
 ## Storage
 
-The app uses versioned `localStorage` under `typedo:v1`. It stores settings, aggregate key statistics, lesson rounds, seen lesson passages, up to 64 learning-evidence samples per lesson, story bookmarks, one unfinished draft per story, and up to 500 completed sessions. Learning samples keep per-key counts, guidance use, and dates for review scheduling and comparisons. Backup imports validate that evidence and recompute retention rather than trusting imported status labels. Story drafts hold typed text, attempt counters, and elapsed time locally. They do not count toward daily goals, history, or aggregate statistics until the chapter is complete. The history screen displays the latest 50; exports contain all retained sessions. Lesson completion and story bookmarks are retained even when older session history reaches its limit. There is no backend, account, analytics, or typing-content upload. Optional web fonts are requested from Google Fonts; system fallbacks work without them.
+The app uses the `typedo` IndexedDB database, schema version 1. The `records` store keeps the profile list under `typedo:profiles:v1`, the original profile under `typedo:v1`, and named profiles under `typedo:profile:<id>:v1`. Records retain their version 1 JSON format, so existing export files still restore. The `migrations` store tracks completed storage migrations.
 
-This is appropriate for a personal first version. Cookies are unnecessary for these records. Data belongs to this browser and site origin, so different addresses have separate histories. Clearing browser data removes progress. Export and restore move results between devices or origins. Storage failures show a message while practice remains usable.
+Each profile includes settings, saved passages, aggregate key statistics, lesson progress and learning evidence, story bookmarks, unfinished lesson/story/workspace drafts, and up to 500 completed sessions. The history screen displays the latest 50; exports contain every retained session. Completed lesson and story credit stays available when older history reaches its limit. A backup contains one profile's progress, not the profile list.
 
-If saved data cannot be read, automatic saving pauses to protect the original. The warning offers a download of the original data when available. You can keep typing and export that visit's results. Restoring a valid backup resumes saving and includes results completed during the visit; an invalid backup leaves the original untouched.
+On first use, a single transaction copies Typedo localStorage records and the older `keysteady:v1` save, then records completion. It also preserves orphaned profile records. Existing IndexedDB records take precedence. The original localStorage values stay untouched as recovery copies, including damaged JSON. Once migration commits, the app uses IndexedDB exclusively and never reimports stale localStorage copies. If migration fails, no partial copy is committed, automatic saving pauses, and migration can retry on the next visit.
 
-For future cross-device sync, add authentication and a database behind a small storage interface. Never put database credentials in the React client.
+The workspace waits for its profile to load before enabling practice or autosaving. Saving indicators remain pending until the transaction commits. Writes happen while typing and when pausing or navigating; page-exit checkpoints are additional attempts, since closing a browser cannot guarantee completion of an asynchronous write. A profile switch waits for the current checkpoint to commit. Profile-list updates detect concurrent changes in one transaction. Concurrent practice in the same profile still uses the last committed snapshot; automatic merging across tabs is not implemented.
+
+If saved data cannot be read, automatic saving pauses to protect the original. The warning offers a download of the original data when available. Practice and export remain usable for that visit. Restoring a valid backup resumes saving and includes results completed during the visit; an invalid backup leaves the original untouched. Storage errors never fall back to writing localStorage.
+
+Data belongs to this browser and site origin. Clearing browser data removes progress; export and restore move it between devices or origins. There is no backend, account, analytics, or typing-content upload. Optional web fonts are requested from Google Fonts; system fallbacks work without them.
+
+No other storage needs to migrate for this change. Offline app files belong in the service worker's Cache Storage, and shareable challenges stay in URL fragments. JSON backups keep the same format. If the history or passage limits grow, consider separate IndexedDB records and indexes instead of rewriting a whole profile. Cross-device sync would need authentication, a server database, and rules for merging local and remote work. Never put database credentials in the React client.
 
 ## Backlog
 
@@ -75,7 +81,8 @@ Classroom assignments, teacher reports, accounts, and cross-device sync are also
 
 - `src/typing.js`: pure typing engine, metrics, lesson generation, finger mapping.
 - `src/adaptivePractice.js`: readable practice passages and recommendations based on recorded mistakes.
-- `src/storage.js`: versioned persistence and backup validation.
+- `src/browserStorage.js`: IndexedDB transactions, one-time localStorage migration, and atomic profile-list updates.
+- `src/storage.js`: asynchronous progress persistence and versioned backup validation.
 - `src/App.jsx`: workspace, result/progress screens, settings, shortcuts.
 - `src/Start.jsx`: first-visit explanation and practice choices.
 - `src/Keyboard.jsx`: keyboard and finger guide.

@@ -245,14 +245,14 @@ test('specific improvement feedback needs multiple comparable samples and adequa
   assert.equal(getLessonImprovement(record(perfect), run('still-perfect', day(3))), null);
 });
 
-test('version 1 storage preserves learning evidence and settings through save, import and nonregressing merge', () => {
+test('version 1 storage preserves learning evidence and settings through save, import and nonregressing merge', async () => {
   const older = { ...emptyProgress(), lessonLearning: baseline() };
   const result = check('check-1', day(2));
   const newer = { ...emptyProgress(), settings: { ...emptyProgress().settings, lessonTheme: 'adventure', lessonLength: 'extra' }, history: [result], lessonLearning: applyLessonLearningResult(older.lessonLearning, result) };
   let saved;
   const storage = { setItem: (_, value) => { saved = value; }, getItem: () => saved };
-  assert.equal(writeProgress(storage, newer), '');
-  const loaded = readProgress(storage).progress;
+  assert.equal((await writeProgress(storage, newer)), '');
+  const loaded = (await readProgress(storage)).progress;
   assert.deepEqual(loaded.lessonLearning, newer.lessonLearning);
   assert.equal(loaded.history[0].guided, false);
   assert.equal(loaded.history[0].attempts, 80);

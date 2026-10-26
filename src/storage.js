@@ -5,6 +5,7 @@ import { lessonResultEvidence, mergeLessonLearning, sanitizeLessonLearning } fro
 import { sanitizeLessonDrafts } from './lessonDrafts.js';
 import { sanitizeWorkspaceDrafts } from './workspaceDrafts.js';
 import { sanitizeSavedPassages } from './practiceLibrary.js';
+import { browserStorage } from './browserStorage.js';
 
 export const STORAGE_KEY = 'typedo:v1';
 export const DEFAULT_SETTINGS = { mode: 'time', duration: 30, wordCount: 25, lesson: 'home', lessonTheme: 'everyday', lessonLength: 'standard', punctuation: false, numbers: false, strict: true, guide: true, sound: false, theme: 'dark', themeRevision: 2, goal: 5, dailyMinutes: 5, weeklyDays: 3, passageSize: 28, lineHeight: 1.9, showLiveStats: true, customText: 'Keep your eyes on the screen. Place your fingers on the home row and type each word carefully.' };
@@ -110,12 +111,12 @@ export function mergeProgress(currentValue, incomingValue) {
   };
 }
 
-export function readProgress(storage, storageKey = STORAGE_KEY) {
+export async function readProgress(storage = browserStorage, storageKey = STORAGE_KEY) {
   let saved = null;
   try {
-    saved = storage.getItem(storageKey) ?? (storageKey === STORAGE_KEY ? storage.getItem('keysteady:v1') : null);
-    const raw = saved ? JSON.parse(saved) : null;
-    const progress = saved ? validateProgress(raw) : emptyProgress();
+    saved = await storage.getItem(storageKey) ?? (storageKey === STORAGE_KEY ? await storage.getItem('keysteady:v1') : null);
+    const raw = saved !== null ? JSON.parse(saved) : null;
+    const progress = saved !== null ? validateProgress(raw) : emptyProgress();
     const warning = discardedDraftsNotice(raw, progress);
     return { progress, warning, writeBlocked: false, recoveryRaw: warning ? saved : null };
   } catch {
@@ -126,7 +127,7 @@ export function readProgress(storage, storageKey = STORAGE_KEY) {
   }
 }
 
-export function writeProgress(storage, progress, storageKey = STORAGE_KEY) {
-  try { storage.setItem(storageKey, JSON.stringify(progress)); return ''; }
+export async function writeProgress(storage, progress, storageKey = STORAGE_KEY) {
+  try { await storage.setItem(storageKey, JSON.stringify(progress)); return ''; }
   catch { return 'Browser storage is unavailable. Export your progress before leaving.'; }
 }

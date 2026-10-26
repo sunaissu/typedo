@@ -90,13 +90,13 @@ test('passage history rejects unknown content and separates guided practice from
   assert.deepEqual(applyLessonResult(assessed, result({ passage: 'injected content' }))[first.id].seenPractice, [first.practiceVariants[0]]);
 });
 
-test('partial round progress and seen passages survive storage and backup validation', () => {
+test('partial round progress and seen passages survive storage and backup validation', async () => {
   const run = result({ practiceRound: 1, passage: first.practiceVariants[1] });
   const progress = { ...emptyProgress(), history: [run], lessonProgress: applyLessonResult({}, run) };
   let saved;
   const storage = { setItem: (_, value) => { saved = value; }, getItem: () => saved };
-  assert.equal(writeProgress(storage, progress), '');
-  const reloaded = readProgress(storage).progress;
+  assert.equal((await writeProgress(storage, progress)), '');
+  const reloaded = (await readProgress(storage)).progress;
   assert.equal(reloaded.lessonProgress[first.id].practiceRounds, 2);
   assert.deepEqual(reloaded.lessonProgress[first.id].seenPractice, [first.practiceVariants[1]]);
   assert.deepEqual(validateProgress(JSON.parse(saved)).lessonProgress, reloaded.lessonProgress);

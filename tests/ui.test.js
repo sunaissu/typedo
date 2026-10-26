@@ -1,4 +1,5 @@
-import test, { after, afterEach, before } from 'node:test';
+import { testStorage, settleStorage } from './storage-helpers.js';
+import test, { beforeEach, after, afterEach, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
@@ -17,6 +18,14 @@ let App;
 let Lessons;
 let WordProgress;
 let root;
+let storage;
+beforeEach(() => { storage = testStorage(dom.window.localStorage); });
+async function readSaved(key) {
+  let raw;
+  await React.act(async () => { raw = await storage.getItem(key); });
+  return raw;
+}
+
 const originalGlobals = new Map();
 const RealDate = Date;
 let calendarNow = 0;
@@ -53,7 +62,7 @@ before(async () => {
 afterEach(async () => {
   if (root) await React.act(async () => root.unmount());
   root = null;
-  dom.window.localStorage.clear();
+  await storage.close(); dom.window.localStorage.clear();
   globalThis.Date = RealDate;
 });
 
@@ -68,7 +77,8 @@ after(async () => {
 
 async function mount(Component = App, props = {}) {
   root = createRoot(document.querySelector('#root'));
-  await React.act(async () => root.render(React.createElement(Component, props)));
+  await React.act(async () => root.render(React.createElement(Component, { storage, ...props })));
+  await settleStorage(React);
 }
 
 async function mountWorkspace(Component = App, props = {}) {
@@ -94,7 +104,7 @@ async function key(target, value, modifiers = {}) {
 }
 
 async function nextFrame() {
-  await React.act(async () => new Promise(resolve => requestAnimationFrame(resolve)));
+  await React.act(async () => new Promise(resolve => requestAnimationFrame(resolve))); await settleStorage(React);
 }
 
 async function confirmRestartIfAsked() {
@@ -152,15 +162,54 @@ function storyBook(story) {
   return book;
 }
 
-function savedProgress() {
-  return JSON.parse(dom.window.localStorage.getItem(STORAGE_KEY));
+async function savedProgress() {
+  return JSON.parse((await readSaved(STORAGE_KEY)));
 }
 
-function seedSettings(settings) {
+async function seedSettings(settings) {
   const progress = emptyProgress();
   progress.settings = { ...progress.settings, ...settings };
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
 }
+
+test('startup waits for legacy migration before mounting practice or saving default data, including StrictMode', async context => {
+  const progress = emptyProgress();
+  progress.settings.goal = 10;
+  progress.settings.theme = 'light';
+  const raw = JSON.stringify(progress);
+  dom.window.localStorage.setItem(STORAGE_KEY, raw);
+  let release;
+  const pending = new Promise(resolve => { release = resolve; });
+  const getItem = storage.getItem.bind(storage);
+  context.mock.method(storage, 'getItem', async key => { await pending; return getItem(key); });
+  const writes = context.mock.method(storage, 'setItem');
+  root = createRoot(document.querySelector('#root'));
+  await React.act(async () => root.render(React.createElement(React.StrictMode, null, React.createElement(App, { storage }))));
+  assert.match(document.querySelector('[role="status"]').textContent, /Loading your progress/);
+  assert.equal(document.querySelector('nav'), null);
+  assert.equal(writes.mock.callCount(), 0);
+  await React.act(async () => release());
+  await settleStorage(React);
+  assert.equal((await savedProgress()).settings.goal, 10);
+  assert.equal(document.documentElement.dataset.theme, 'light');
+  assert.equal(dom.window.localStorage.getItem(STORAGE_KEY), raw);
+});
+
+test('pending saves never claim success and an older completion cannot hide a newer save failure', async context => {
+  await mount();
+  const saves = [];
+  context.mock.method(storage, 'setItem', () => new Promise((resolve, reject) => saves.push({ resolve, reject })));
+  await React.act(async () => document.querySelector('[aria-label="Use light theme"]').click());
+  assert.match(document.querySelector('.sidebar-local').textContent, /Saving/);
+  assert.doesNotMatch(document.querySelector('footer').textContent, /Saved locally/);
+  await React.act(async () => document.querySelector('[aria-label="Use dark theme"]').click());
+  assert.equal(saves.length, 2);
+  await React.act(async () => saves[1].reject(new Error('Storage full')));
+  assert.match(document.querySelector('footer').textContent, /Session only/);
+  await React.act(async () => saves[0].resolve());
+  assert.match(document.querySelector('footer').textContent, /Session only/);
+  assert.match(document.querySelector('.warning').textContent, /storage is unavailable/);
+});
 
 test('new visitors get a clear starting choice before any typing input takes focus', async () => {
   await mount();
@@ -175,14 +224,14 @@ test('new visitors get a clear starting choice before any typing input takes foc
   assert.ok(document.querySelector('#lesson-accessible-prompt'));
   assert.match(document.querySelector('.lesson-round-instruction').textContent, /Find the bumps on F and J/);
   assert.equal(document.activeElement, document.querySelector('.lesson-type-surface textarea'));
-  assert.equal(savedProgress().history.length, 0, 'Choosing a lesson does not fabricate completed progress');
+  assert.equal((await savedProgress()).history.length, 0, 'Choosing a lesson does not fabricate completed progress');
 });
 
 test('the quick start test resets its promised format and waits for the first key', async () => {
-  seedSettings({ mode: 'words', wordCount: 100, duration: 120, punctuation: true, numbers: true });
+  (await seedSettings({ mode: 'words', wordCount: 100, duration: 120, punctuation: true, numbers: true }));
   await mount();
   await click(button('Start a 30-second test'));
-  const settings = savedProgress().settings;
+  const settings = (await savedProgress()).settings;
   assert.equal(settings.mode, 'time');
   assert.equal(settings.duration, 30);
   assert.equal(settings.punctuation, false);
@@ -209,7 +258,7 @@ test('Start opens the backup picker directly and resumes the imported lesson rou
   await click(button('Restore progress from a backup'));
   assert.equal(pickerOpens, 1);
   assert.ok(document.querySelector('.start-page'), 'Opening or canceling the picker does not move to an unrelated page');
-  assert.equal(savedProgress().history.length, 0);
+  assert.equal((await savedProgress()).history.length, 0);
   const backup = emptyProgress();
   backup.lessonProgress = { [LESSON_COURSE[0].id]: { practiceRounds: 1, attempts: 1 } };
   await restoreBackup(backup);
@@ -221,7 +270,7 @@ test('Start opens the backup picker directly and resumes the imported lesson rou
 test('Start distinguishes a first lesson from other practice and a finished course', async () => {
   const progress = emptyProgress();
   progress.storyProgress = { [STORIES[0].id]: { completedChapters: 1, attempts: 1 } };
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   await mount();
   await click(document.querySelector('[aria-label="Typedo home"]'));
   assert.ok(button('Start your first lesson'));
@@ -229,7 +278,7 @@ test('Start distinguishes a first lesson from other practice and a finished cour
   await React.act(async () => root.unmount());
   root = null;
   progress.lessonProgress = Object.fromEntries(LESSON_COURSE.map(lesson => [lesson.id, { practiceRounds: 3, attempts: 3 }]));
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   await mount();
   await click(document.querySelector('[aria-label="Typedo home"]'));
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
@@ -240,8 +289,8 @@ test('Start distinguishes a first lesson from other practice and a finished cour
 test('returning practice starts at Home and Start respects unavailable storage', async context => {
   const progress = emptyProgress();
   progress.lessonProgress = { [LESSON_COURSE[0].id]: { practiceRounds: 1, attempts: 1 } };
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
-  context.mock.method(dom.window.Storage.prototype, 'setItem', () => { throw new Error('Storage denied'); });
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  context.mock.method(storage, 'setItem', async () => { throw new Error('Storage denied'); });
   await mount();
   assert.ok(document.querySelector('.home-page'));
   assert.equal(document.querySelector('[aria-label="Typing input"]'), null);
@@ -302,12 +351,12 @@ test('theme switches the page palette and survives an app reload', async () => {
 test('a completed typing test saves once and the keyboard restart is immediately usable', async () => {
   const progress = emptyProgress();
   progress.settings = { ...progress.settings, mode: 'custom', customText: 'fj' };
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   await mountWorkspace();
   const input = document.querySelector('[aria-label="Typing input"]');
   await key(input, 'f');
   await key(input, 'j');
-  let saved = JSON.parse(dom.window.localStorage.getItem(STORAGE_KEY));
+  let saved = JSON.parse((await readSaved(STORAGE_KEY)));
   assert.equal(saved.history.length, 1);
   assert.equal(saved.history[0].accuracy, 100);
   assert.equal(saved.history[0].correct, 2);
@@ -315,7 +364,7 @@ test('a completed typing test saves once and the keyboard restart is immediately
 
   await key(button('Go again'), 'Enter', { ctrlKey: true });
   assert.ok(document.querySelector('[aria-label="Typing input"]'));
-  saved = JSON.parse(dom.window.localStorage.getItem(STORAGE_KEY));
+  saved = JSON.parse((await readSaved(STORAGE_KEY)));
   assert.equal(saved.history.length, 1, 'Restart does not duplicate a saved result');
 });
 
@@ -370,19 +419,19 @@ test('the nearby retry shortcut keeps the optional test and ignores unrelated ke
 });
 
 test('Shift+Enter restarts free typing without changing saved results or other views', async () => {
-  seedSettings({ mode: 'custom', customText: 'fj' });
+  (await seedSettings({ mode: 'custom', customText: 'fj' }));
   await mountWorkspace();
   let input = document.querySelector('[aria-label="Typing input"]');
   await key(input, 'f');
   await key(input, 'Enter', { shiftKey: true });
   await click(button('Restart attempt'));
   assert.equal(document.querySelectorAll('.char.correct').length, 0);
-  assert.equal(savedProgress().history.length, 0);
+  assert.equal((await savedProgress()).history.length, 0);
   input = document.querySelector('[aria-label="Typing input"]');
   await typeText(input, 'fj');
   await key(button('Go again'), 'Enter', { shiftKey: true });
   await nextFrame();
-  assert.equal(savedProgress().history.length, 1);
+  assert.equal((await savedProgress()).history.length, 1);
   assert.ok(document.activeElement === document.querySelector('[aria-label="Typing input"]'));
   await click(button(/^Stories/, document.querySelector('[aria-label="Main navigation"]')));
   await key(document.activeElement, 'Enter', { shiftKey: true });
@@ -447,7 +496,7 @@ test('lesson results persist through app reload and appear in the course and pro
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
   await click(button('Optional test'));
   await typeText(document.querySelector('textarea'), lessonText());
-  const saved = JSON.parse(dom.window.localStorage.getItem(STORAGE_KEY));
+  const saved = JSON.parse((await readSaved(STORAGE_KEY)));
   assert.equal(saved.history.length, 1);
   assert.equal(saved.history[0].mode, 'lesson');
   assert.equal(saved.history[0].lessonId, lesson.id);
@@ -463,11 +512,11 @@ test('lesson results persist through app reload and appear in the course and pro
   assert.equal(document.querySelector('#lesson-title').textContent, LESSON_COURSE[1].title, 'Next unpassed lesson is selected on return');
   await click(button('Progress', document.querySelector('[aria-label="Main navigation"]')));
   assert.match(document.querySelector('tbody').textContent, new RegExp(lesson.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.equal(JSON.parse(dom.window.localStorage.getItem(STORAGE_KEY)).history.length, 1);
+  assert.equal(JSON.parse((await readSaved(STORAGE_KEY))).history.length, 1);
 });
 
 test('beginner hands appear with the prompt and follow each key, opposite-hand Shift, and space in focus mode', async () => {
-  seedSettings({ mode: 'custom', customText: 'fJA x' });
+  (await seedSettings({ mode: 'custom', customText: 'fJA x' }));
   await mountWorkspace();
   const card = document.querySelector('[aria-label="Typing workspace"]');
   const coach = card.querySelector('[aria-label="Live finger guide"]');
@@ -508,7 +557,7 @@ test('beginner hands appear with the prompt and follow each key, opposite-hand S
 });
 
 test('guidance choices preserve typing progress, persist on reload, and apply to lesson practice only', async () => {
-  seedSettings({ mode: 'custom', customText: 'fjkl' });
+  (await seedSettings({ mode: 'custom', customText: 'fjkl' }));
   await mountWorkspace();
   await key(document.querySelector('[aria-label="Typing input"]'), 'f');
   await click(button('Without finger hints'));
@@ -516,13 +565,13 @@ test('guidance choices preserve typing progress, persist on reload, and apply to
   assert.equal(document.querySelector('[aria-label="Live finger guide"]'), null);
   assert.equal(document.querySelector('.char.current').textContent, 'j');
   assert.equal(document.querySelectorAll('.char.correct').length, 1, 'Hiding hands does not restart an active session');
-  assert.equal(savedProgress().settings.guide, false);
+  assert.equal((await savedProgress()).settings.guide, false);
 
   await click(button('Beginner'));
   assert.equal(button('Beginner').getAttribute('aria-pressed'), 'true');
   assert.equal(document.querySelector('.coach-cue > kbd').textContent, 'j');
   assert.equal(document.querySelectorAll('.char.correct').length, 1, 'Restoring hands preserves the current position');
-  assert.equal(savedProgress().settings.guide, true);
+  assert.equal((await savedProgress()).settings.guide, true);
   await click(button('Without finger hints'));
   await reload();
   await click(button('Resume typing', document.querySelector('dialog')));
@@ -537,19 +586,19 @@ test('guidance choices preserve typing progress, persist on reload, and apply to
   await click(button('Beginner'));
   assert.equal(document.querySelector('.coach-cue > kbd').textContent, practice[2] === ' ' ? 'Space' : practice[2]);
   assert.equal(document.querySelectorAll('.char.correct').length, 2, 'Enabling lesson guidance does not reset practice');
-  assert.equal(savedProgress().settings.guide, true, 'Course guidance updates the shared saved preference');
+  assert.equal((await savedProgress()).settings.guide, true, 'Course guidance updates the shared saved preference');
   await click(button('Optional test'));
   await click(button('Restart attempt'));
   assert.equal(document.querySelector('[aria-label="Live finger guide"]'), null);
   assert.equal(document.querySelector('[aria-label="QWERTY keyboard finger guide"]'), null);
   assert.equal(document.querySelector('[aria-label="Typing assistance"]'), null);
-  assert.equal(savedProgress().settings.guide, true, 'A hint-free test does not overwrite the beginner preference');
+  assert.equal((await savedProgress()).settings.guide, true, 'A hint-free test does not overwrite the beginner preference');
   await click(button('Word practice'));
   assert.ok(document.querySelector('[aria-label="Live finger guide"]'), 'Returning to practice restores the preferred guide');
 });
 
 test('new skill instructions stay visible without hands across rounds, lessons and reload', async () => {
-  seedSettings({ guide: false });
+  (await seedSettings({ guide: false }));
   await mountWorkspace();
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
   assert.equal(document.querySelector('[aria-label="Live finger guide"]'), null);
@@ -564,7 +613,7 @@ test('new skill instructions stay visible without hands across rounds, lessons a
   const nextSkill = LESSON_COURSE.find(item => item.id === 'center-reach');
   await click([...document.querySelectorAll('.lesson-course-card')].find(card => card.querySelector('strong')?.textContent === nextSkill.title));
   assert.equal(document.querySelector('.lesson-round-instruction').textContent, nextSkill.practiceRounds[0].instruction || nextSkill.instruction);
-  assert.equal(savedProgress().settings.guide, false);
+  assert.equal((await savedProgress()).settings.guide, false);
   await click(button('Optional test'));
   assert.equal(document.querySelector('.lesson-round-instruction'), null, 'An active assessment still hides the instruction');
   await click(button('Word practice'));
@@ -607,19 +656,19 @@ test('a difficult practice block offers a short review while preserving credit a
   const text = lessonText();
   const input = document.querySelector('textarea');
   await typeText(input, [...text].map(char => `z${char}`).join(''));
-  assert.equal(savedProgress().history.at(-1).accuracy, 50);
-  assert.equal(savedProgress().lessonProgress[first.id].practiceRounds, 1);
+  assert.equal((await savedProgress()).history.at(-1).accuracy, 50);
+  assert.equal((await savedProgress()).lessonProgress[first.id].practiceRounds, 1);
   assert.match(document.querySelector('.lesson-practice-feedback').textContent, /mistakes in .* attempts/);
   assert.match(document.querySelector('.lesson-practice-feedback').textContent, /Press the/);
   assert.ok(button('Next block'), 'Struggling never locks the learner into a retry');
   await click(button('Review this block'));
   assertLessonRound(first, 0, 'Review stays on the completed round');
   assert.ok(lessonText().length < text.length, 'The suggested review is shorter than standard practice');
-  assert.equal(savedProgress().settings.lessonLength, 'standard', 'One short review does not change the saved preference');
-  assert.equal(savedProgress().history.length, 1, 'Starting review creates no extra completion');
+  assert.equal((await savedProgress()).settings.lessonLength, 'standard', 'One short review does not change the saved preference');
+  assert.equal((await savedProgress()).history.length, 1, 'Starting review creates no extra completion');
   await typeText(document.querySelector('textarea'), lessonText());
   assert.equal(document.querySelector('.lesson-practice-feedback'), null, 'A clean result does not keep the old recommendation');
-  assert.equal(savedProgress().lessonProgress[first.id].practiceRounds, 1, 'Repeating a round adds no new course credit');
+  assert.equal((await savedProgress()).lessonProgress[first.id].practiceRounds, 1, 'Repeating a round adds no new course credit');
   await click(button('Next block'));
   assertLessonRound(first, 1, 'The learner can continue after a short review');
 });
@@ -685,16 +734,16 @@ test('three guided rounds advance with Enter and Ctrl+Enter without requiring a 
     const primary = document.querySelector('.lesson-result-actions .primary-button');
     assert.equal(primary.textContent.trim(), round < 2 ? 'Next block' : 'Next lesson');
     assert.equal(document.activeElement, primary, 'Completion focuses the continuation action instead of Reset');
-    assert.equal(savedProgress().lessonProgress[lesson.id].practiceRounds, round + 1);
-    assert.equal(savedProgress().lessonProgress[lesson.id].passed, false);
+    assert.equal((await savedProgress()).lessonProgress[lesson.id].practiceRounds, round + 1);
+    assert.equal((await savedProgress()).lessonProgress[lesson.id].passed, false);
     await key(primary, 'Enter', round === 1 ? { ctrlKey: true } : {});
   }
   assert.equal(new Set(passages).size, 3, 'Moving through the lesson changes the typing material');
   assert.equal(document.querySelector('#lesson-title').textContent, LESSON_COURSE[1].title);
-  assert.equal(savedProgress().history.length, 3, 'Each completed round records exactly one result');
-  const seen = savedProgress().lessonProgress[lesson.id].seenPractice;
+  assert.equal((await savedProgress()).history.length, 3, 'Each completed round records exactly one result');
+  const seen = (await savedProgress()).lessonProgress[lesson.id].seenPractice;
   assert.deepEqual([...seen].sort(), lesson.practiceVariants.filter(text => passages.some(passage => passage.includes(text))).sort(), 'Seen material records recognized authored segments, not the concatenated blocks');
-  assert.ok(savedProgress().history.every(item => item.stage === 'practice'));
+  assert.ok((await savedProgress()).history.every(item => item.stage === 'practice'));
 });
 
 test('lesson theme and length choices preserve the current block and apply on retry', async () => {
@@ -714,9 +763,9 @@ test('lesson theme and length choices preserve the current block and apply on re
   await select('Practice length', 'quick');
   assert.equal(lessonText(), initial, 'Changing a preference keeps the active passage intact');
   assert.equal(document.querySelectorAll('.char.correct').length, 3, 'Changing preferences preserves the typing position');
-  assert.equal(savedProgress().history.length, 0, 'Choosing a format does not award a result');
-  assert.equal(savedProgress().settings.lessonTheme, 'adventure');
-  assert.equal(savedProgress().settings.lessonLength, 'quick');
+  assert.equal((await savedProgress()).history.length, 0, 'Choosing a format does not award a result');
+  assert.equal((await savedProgress()).settings.lessonTheme, 'adventure');
+  assert.equal((await savedProgress()).settings.lessonLength, 'quick');
 
   await key(document.querySelector('textarea'), 'Enter', { shiftKey: true });
   await confirmRestartIfAsked();
@@ -728,7 +777,7 @@ test('lesson theme and length choices preserve the current block and apply on re
   await click(button('Restart'));
   await confirmRestartIfAsked();
   assert.ok(lessonText().length > quick.length, 'Standard practice contains more typing than a quick visit');
-  assert.equal(savedProgress().history.length, 0);
+  assert.equal((await savedProgress()).history.length, 0);
 
   await reload();
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
@@ -765,18 +814,18 @@ test('finishing for now gives a stopping point and resumes the next unfinished r
   await typeText(document.querySelector('textarea'), lessonText());
   await click(button('Finish for now'));
   assert.ok(document.querySelector('.start-page'));
-  assert.equal(savedProgress().history.length, 1);
-  assert.equal(savedProgress().lessonProgress[LESSON_COURSE[0].id].practiceRounds, 1);
+  assert.equal((await savedProgress()).history.length, 1);
+  assert.equal((await savedProgress()).lessonProgress[LESSON_COURSE[0].id].practiceRounds, 1);
   await click(document.querySelector('.home-continue .primary-button'));
   assertLessonRound(LESSON_COURSE[0], 1, 'Returning after a break keeps the completed round');
-  assert.equal(savedProgress().history.length, 1, 'Resuming does not create another result');
+  assert.equal((await savedProgress()).history.length, 1, 'Resuming does not create another result');
 });
 
 test('optional independent and extra practice preserve the final round and earned course progress', async () => {
   const lesson = LESSON_COURSE[0];
   const progress = emptyProgress();
   progress.lessonProgress = { [lesson.id]: { practiceRounds: 2, attempts: 2 } };
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   await mountWorkspace();
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
   const standard = lessonText();
@@ -786,20 +835,20 @@ test('optional independent and extra practice preserve the final round and earne
   assert.equal(document.querySelectorAll('.char.correct').length, 3, 'Fading hints keeps the current typing position');
   assert.equal(document.querySelector('[aria-label="Live finger guide"]'), null);
   await typeText(document.querySelector('textarea'), standard.slice(3));
-  assert.equal(savedProgress().lessonProgress[lesson.id].practiceRounds, 3);
-  assert.equal(savedProgress().lessonLearning[lesson.id].samples.at(-1).guided, true, 'Turning off hints mid-round does not relabel guided work as independent');
-  assert.equal(Boolean(savedProgress().lessonLearning[lesson.id].retainedAt), false, 'Completing a lesson does not claim later retention');
+  assert.equal((await savedProgress()).lessonProgress[lesson.id].practiceRounds, 3);
+  assert.equal((await savedProgress()).lessonLearning[lesson.id].samples.at(-1).guided, true, 'Turning off hints mid-round does not relabel guided work as independent');
+  assert.equal(Boolean((await savedProgress()).lessonLearning[lesson.id].retainedAt), false, 'Completing a lesson does not claim later retention');
 
   await click(button('A little more practice'));
   const extra = lessonText();
   assert.ok(extra.length > standard.length, 'Optional extra practice offers a fuller block');
   assertLessonRound(lesson, 2, 'Extra practice stays on the completed final round');
-  assert.equal(savedProgress().history.length, 1, 'Asking for more practice does not save an unfinished result');
+  assert.equal((await savedProgress()).history.length, 1, 'Asking for more practice does not save an unfinished result');
   await typeText(document.querySelector('textarea'), extra);
-  assert.equal(savedProgress().history.length, 2);
-  assert.equal(savedProgress().lessonLearning[lesson.id].samples.at(-1).guided, false, 'A fresh block remembers the independent preference');
-  assert.equal(savedProgress().lessonProgress[lesson.id].practiceRounds, 3, 'Extra practice cannot earn an additional course round');
-  assert.equal(Boolean(savedProgress().lessonLearning[lesson.id].retainedAt), false);
+  assert.equal((await savedProgress()).history.length, 2);
+  assert.equal((await savedProgress()).lessonLearning[lesson.id].samples.at(-1).guided, false, 'A fresh block remembers the independent preference');
+  assert.equal((await savedProgress()).lessonProgress[lesson.id].practiceRounds, 3, 'Extra practice cannot earn an additional course round');
+  assert.equal(Boolean((await savedProgress()).lessonLearning[lesson.id].retainedAt), false);
   await click(button('Next lesson'));
   assertLessonRound(LESSON_COURSE[1], 0, 'Continuing after extra practice opens the next unfinished lesson');
 });
@@ -821,7 +870,7 @@ test('a guide enabled through shared settings is counted even when hidden again 
   assert.equal(completed[0].guided, true, 'Any use of shared guidance prevents this run from claiming to be independent');
 });
 
-function seedDueLessonReview() {
+async function seedDueLessonReview() {
   const lesson = LESSON_COURSE.find(item => item.id === 'center-reach');
   const resumeLesson = LESSON_COURSE.find(item => item.id === 'top-row');
   const progress = emptyProgress();
@@ -835,12 +884,12 @@ function seedDueLessonReview() {
     attempts: 80, correctAttempts: 80, correct: 80, elapsed: 60000, accuracy: 100,
     keyStats: { g: { attempts: 40, errors: 0 }, h: { attempts: 40, errors: 0 } }, targetKeys: ['g', 'h'],
   });
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   return { lesson, resumeLesson };
 }
 
 test('a due review leaves course credit intact and returns to the unfinished lesson', async () => {
-  const { lesson, resumeLesson } = seedDueLessonReview();
+  const { lesson, resumeLesson } = await seedDueLessonReview();
   await mountWorkspace();
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
   assertLessonRound(resumeLesson, 1, 'Review suggestions do not automatically replace the current lesson');
@@ -852,19 +901,19 @@ test('a due review leaves course credit intact and returns to the unfinished les
   await key(document.querySelector('textarea'), 'Enter', { shiftKey: true });
   await confirmRestartIfAsked();
   assert.equal(document.querySelector('.lesson-workspace').dataset.kind, 'review', 'Retry keeps the selected review separate from the course');
-  assert.equal(savedProgress().history.length, 0, 'Restarting a review does not save unfinished work');
+  assert.equal((await savedProgress()).history.length, 0, 'Restarting a review does not save unfinished work');
   await typeText(document.querySelector('textarea'), lessonText());
-  assert.equal(savedProgress().history[0].practiceKind, 'review');
-  assert.equal(savedProgress().lessonProgress[lesson.id].practiceRounds, 3);
-  assert.equal(savedProgress().lessonProgress[lesson.id].attempts, 3, 'A refresher does not alter course-attempt bookkeeping');
-  assert.equal(savedProgress().lessonProgress[resumeLesson.id].practiceRounds, 1);
-  assert.equal(Boolean(savedProgress().lessonLearning[lesson.id].retainedAt), false, 'A guided refresher is not a retention check');
+  assert.equal((await savedProgress()).history[0].practiceKind, 'review');
+  assert.equal((await savedProgress()).lessonProgress[lesson.id].practiceRounds, 3);
+  assert.equal((await savedProgress()).lessonProgress[lesson.id].attempts, 3, 'A refresher does not alter course-attempt bookkeeping');
+  assert.equal((await savedProgress()).lessonProgress[resumeLesson.id].practiceRounds, 1);
+  assert.equal(Boolean((await savedProgress()).lessonLearning[lesson.id].retainedAt), false, 'A guided refresher is not a retention check');
   await key(button('Continue lessons'), 'Enter');
   assertLessonRound(resumeLesson, 1, 'Leaving a review resumes the exact unfinished course round');
 });
 
 test('a later hint-free check records retention separately from course completion', async () => {
-  const { lesson, resumeLesson } = seedDueLessonReview();
+  const { lesson, resumeLesson } = await seedDueLessonReview();
   await mountWorkspace();
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
   await click(button(`Check ${lesson.title} without hints`));
@@ -873,7 +922,7 @@ test('a later hint-free check records retention separately from course completio
   assert.equal(document.querySelector('[aria-label="Typing assistance"]'), null);
   assert.ok(!document.querySelector('.lesson-finger-tips'), 'A later check cannot reveal finger-placement hints through the help details');
   await typeText(document.querySelector('textarea'), lessonText());
-  const saved = savedProgress();
+  const saved = (await savedProgress());
   assert.equal(saved.history[0].practiceKind, 'check');
   assert.equal(saved.lessonLearning[lesson.id].samples.at(-1).guided, false);
   assert.ok(saved.lessonLearning[lesson.id].retainedAt, 'A sufficiently accurate later check earns a separate retention record');
@@ -885,7 +934,7 @@ test('a later hint-free check records retention separately from course completio
 });
 
 test('an optional test refreshes the practice date before a later retention check is offered', async () => {
-  const { lesson } = seedDueLessonReview();
+  const { lesson } = await seedDueLessonReview();
   await mountWorkspace();
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
   assert.ok(button(`Check ${lesson.title} without hints`));
@@ -893,7 +942,7 @@ test('an optional test refreshes the practice date before a later retention chec
   await click(button('Optional test'));
   assert.ok(!document.querySelector('.lesson-finger-tips'));
   await typeText(document.querySelector('textarea'), lessonText());
-  const record = savedProgress().lessonLearning[lesson.id];
+  const record = (await savedProgress()).lessonLearning[lesson.id];
   assert.equal(record.samples.length, 2, 'Optional tests also count as recent exposure to these keys');
   assert.equal(record.samples.at(-1).practiceKind, 'lesson');
   assert.equal(record.samples.at(-1).guided, false);
@@ -907,44 +956,44 @@ test('reload resumes unfinished rounds and completed practice advances to the ne
   const lesson = LESSON_COURSE[0];
   const progress = emptyProgress();
   progress.lessonProgress = { [lesson.id]: { practiceRounds: 1, passed: false, seenPractice: [lesson.practiceRounds[0].passages[0]] } };
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   await mountWorkspace();
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
   assertLessonRound(lesson, 1, 'A returning learner resumes round two');
   await typeText(document.querySelector('textarea'), lessonText());
-  assert.equal(savedProgress().lessonProgress[lesson.id].practiceRounds, 2);
+  assert.equal((await savedProgress()).lessonProgress[lesson.id].practiceRounds, 2);
 
   await reload();
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
   assert.equal(document.querySelector('#lesson-title').textContent, lesson.title);
   assertLessonRound(lesson, 2, 'Reload resumes round three without retaking the previous rounds');
   await typeText(document.querySelector('textarea'), lessonText());
-  assert.equal(savedProgress().lessonProgress[lesson.id].practiceRounds, 3);
+  assert.equal((await savedProgress()).lessonProgress[lesson.id].practiceRounds, 3);
 
   await reload();
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
   assert.equal(document.querySelector('#lesson-title').textContent, LESSON_COURSE[1].title, 'Finishing practice is enough to resume the next lesson');
-  assert.equal(savedProgress().lessonProgress[lesson.id].passed, false, 'No assessment was needed or silently awarded');
+  assert.equal((await savedProgress()).lessonProgress[lesson.id].passed, false, 'No assessment was needed or silently awarded');
 });
 
 test('learners with an old completed warmup continue beyond the first lesson', async () => {
   const progress = emptyProgress();
   progress.lessonProgress = { [LESSON_COURSE[0].id]: { practiced: true, passed: false, attempts: 12 } };
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   await mountWorkspace();
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
   assert.equal(document.querySelector('#lesson-title').textContent, LESSON_COURSE[1].title, 'Existing practice counts even when the learner never took the test');
-  assert.equal(savedProgress().lessonProgress[LESSON_COURSE[0].id].practiceRounds, 3);
+  assert.equal((await savedProgress()).lessonProgress[LESSON_COURSE[0].id].practiceRounds, 3);
 });
 
 test('previous-round navigation replays earned rounds and preserves progress until a block finishes', async () => {
   const lesson = LESSON_COURSE[0];
   const progress = emptyProgress();
   progress.lessonProgress = { [lesson.id]: { practiceRounds: 2, attempts: 2 } };
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   await mountWorkspace();
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
-  const originalProgress = savedProgress().lessonProgress[lesson.id];
+  const originalProgress = (await savedProgress()).lessonProgress[lesson.id];
   assertLessonRound(lesson, 2, 'The next unfinished round remains the entry point');
   assert.equal(lessonRoundButton(3).getAttribute('aria-current'), 'step');
   await typeText(document.querySelector('textarea'), lessonText().slice(0, 3));
@@ -961,20 +1010,20 @@ test('previous-round navigation replays earned rounds and preserves progress unt
   assert.equal(lessonRoundButton(1).getAttribute('aria-current'), 'step');
   assert.ok(lessonRoundButton(2).classList.contains('complete'), 'Later earned credit stays visible while revisiting round one');
   assert.equal(lessonRoundButton(3).disabled, false, 'The first unfinished round remains available');
-  assert.equal(savedProgress().history.length, 0, 'Changing rounds does not save abandoned work');
-  assert.deepEqual(savedProgress().lessonProgress[lesson.id], originalProgress);
+  assert.equal((await savedProgress()).history.length, 0, 'Changing rounds does not save abandoned work');
+  assert.deepEqual((await savedProgress()).lessonProgress[lesson.id], originalProgress);
 
   await typeText(document.querySelector('textarea'), lessonText());
-  assert.equal(savedProgress().history.length, 1);
-  assert.equal(savedProgress().history[0].lessonId, lesson.id);
-  assert.equal(savedProgress().history[0].stage, 'practice');
-  assert.equal(savedProgress().lessonProgress[lesson.id].practiceRounds, 2, 'Completing a replay does not award the same round twice');
-  assert.equal(savedProgress().lessonProgress[lesson.id].attempts, originalProgress.attempts + 1);
+  assert.equal((await savedProgress()).history.length, 1);
+  assert.equal((await savedProgress()).history[0].lessonId, lesson.id);
+  assert.equal((await savedProgress()).history[0].stage, 'practice');
+  assert.equal((await savedProgress()).lessonProgress[lesson.id].practiceRounds, 2, 'Completing a replay does not award the same round twice');
+  assert.equal((await savedProgress()).lessonProgress[lesson.id].attempts, originalProgress.attempts + 1);
   await click(lessonRoundButton(3));
   await nextFrame();
   assertLessonRound(lesson, 2, 'The learner can return directly to the unfinished round');
   assert.ok(document.activeElement === document.querySelector('textarea'));
-  assert.equal(savedProgress().history.length, 1, 'Leaving the replay result does not record it twice');
+  assert.equal((await savedProgress()).history.length, 1, 'Leaving the replay result does not record it twice');
 });
 
 test('round navigation keeps the current passage and unlocks future rounds only after completion', async () => {
@@ -993,13 +1042,13 @@ test('round navigation keeps the current passage and unlocks future rounds only 
   await click(lessonRoundButton(2));
   assertLessonRound(lesson, 0, 'A disabled future round cannot skip unfinished practice');
   assert.equal(document.querySelectorAll('.char.correct').length, 3);
-  assert.equal(savedProgress().history.length, 0);
+  assert.equal((await savedProgress()).history.length, 0);
   await typeText(document.querySelector('textarea'), text.slice(3));
   assert.equal(lessonRoundButton(2).disabled, false, 'Finishing the first round unlocks the second immediately');
   assert.ok(lessonRoundButton(3).disabled, 'The third round still needs the second round');
   await click(lessonRoundButton(2));
   assertLessonRound(lesson, 1, 'The newly unlocked round can be selected');
-  assert.equal(savedProgress().history.length, 1);
+  assert.equal((await savedProgress()).history.length, 1);
 });
 
 for (const [completion, record] of [['all practice rounds', { practiceRounds: 3, attempts: 3 }], ['a passed optional test', { practiceRounds: 1, passed: true, attempts: 2 }]]) {
@@ -1007,7 +1056,7 @@ for (const [completion, record] of [['all practice rounds', { practiceRounds: 3,
     const lesson = LESSON_COURSE[0];
     const progress = emptyProgress();
     progress.lessonProgress = { [lesson.id]: record };
-    dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+    await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
     await mountWorkspace();
     for (let visit = 0; visit < 2; visit++) {
       if (visit) await reload();
@@ -1019,9 +1068,9 @@ for (const [completion, record] of [['all practice rounds', { practiceRounds: 3,
         assertLessonRound(lesson, round, 'A completed lesson allows any practice round to be revisited');
         assert.equal(lessonRoundButton(round + 1).getAttribute('aria-current'), 'step');
       }
-      assert.equal(savedProgress().history.length, 0);
-      assert.equal(savedProgress().lessonProgress[lesson.id].practiceRounds, record.practiceRounds);
-      assert.equal(savedProgress().lessonProgress[lesson.id].passed, Boolean(record.passed));
+      assert.equal((await savedProgress()).history.length, 0);
+      assert.equal((await savedProgress()).lessonProgress[lesson.id].practiceRounds, record.practiceRounds);
+      assert.equal((await savedProgress()).lessonProgress[lesson.id].passed, Boolean(record.passed));
     }
   });
 }
@@ -1030,7 +1079,7 @@ test('Reset changes the passage within the current round without skipping a roun
   const lesson = LESSON_COURSE[0];
   const progress = emptyProgress();
   progress.lessonProgress = { [lesson.id]: { practiceRounds: 1 } };
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   await mountWorkspace();
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
   const initial = lessonText();
@@ -1040,16 +1089,16 @@ test('Reset changes the passage within the current round without skipping a roun
   const reset = lessonText();
   assert.notEqual(reset, initial);
   assertLessonRound(lesson, 1, 'Reset stays on the second round');
-  assert.equal(savedProgress().lessonProgress[lesson.id].practiceRounds, 1, 'Discarding an unfinished passage earns no round');
+  assert.equal((await savedProgress()).lessonProgress[lesson.id].practiceRounds, 1, 'Discarding an unfinished passage earns no round');
   await typeText(document.querySelector('textarea'), reset);
-  assert.equal(savedProgress().lessonProgress[lesson.id].practiceRounds, 2);
+  assert.equal((await savedProgress()).lessonProgress[lesson.id].practiceRounds, 2);
   await click(button('Restart'));
   await confirmRestartIfAsked();
   const review = lessonText();
   assert.notEqual(review, reset);
   assertLessonRound(lesson, 1, 'Explicit reset repeats the completed round, not the next round');
   await typeText(document.querySelector('textarea'), review);
-  assert.equal(savedProgress().lessonProgress[lesson.id].practiceRounds, 2, 'Repeating the same round cannot count twice');
+  assert.equal((await savedProgress()).lessonProgress[lesson.id].practiceRounds, 2, 'Repeating the same round cannot count twice');
   await key(document.activeElement, 'Enter');
   assertLessonRound(lesson, 2, 'Continue remains available after reviewing a round');
 });
@@ -1058,7 +1107,7 @@ test('finishing the last practice round shows course completion and does not res
   const lesson = LESSON_COURSE.at(-1);
   const progress = emptyProgress();
   progress.lessonProgress = Object.fromEntries(LESSON_COURSE.map(item => [item.id, { practiceRounds: item.id === lesson.id ? 2 : 3 }]));
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   await mountWorkspace();
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
   assert.equal(document.querySelector('#lesson-title').textContent, lesson.title);
@@ -1071,7 +1120,8 @@ test('finishing the last practice round shows course completion and does not res
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
   assert.match(document.querySelector('.lessons-page').textContent, /course complete/i);
   assert.equal(document.querySelector('#lesson-accessible-prompt'), null);
-  assert.ok(LESSON_COURSE.every(item => savedProgress().lessonProgress[item.id].practiceRounds === 3));
+  const completedProgress = await savedProgress();
+  assert.ok(LESSON_COURSE.every(item => completedProgress.lessonProgress[item.id].practiceRounds === 3));
 });
 
 test('story selection, finger-guide choices, and Ctrl+Enter preserve the active chapter', async () => {
@@ -1086,7 +1136,7 @@ test('story selection, finger-guide choices, and Ctrl+Enter preserve the active 
   await click(button('Without finger hints'));
   assert.equal(document.querySelector('[aria-label="Live finger guide"]'), null);
   assert.equal(document.querySelectorAll('.char.correct').length, 4, 'Hiding hands keeps the typed text');
-  assert.equal(savedProgress().settings.guide, false);
+  assert.equal((await savedProgress()).settings.guide, false);
   await key(input, 'Enter', { ctrlKey: true });
   assert.ok(document.querySelector('.story-reader'), 'The global typing restart shortcut must not leave Stories');
   assert.equal(document.querySelectorAll('.char.correct').length, 4);
@@ -1094,11 +1144,11 @@ test('story selection, finger-guide choices, and Ctrl+Enter preserve the active 
   await click(button('Beginner'));
   assert.ok(document.querySelector('[aria-label="Live finger guide"]'));
   assert.equal(document.querySelectorAll('.char.correct').length, 4, 'Restoring hands keeps the chapter position');
-  assert.equal(savedProgress().settings.guide, true);
+  assert.equal((await savedProgress()).settings.guide, true);
 
   await click(button('Story library'));
-  assert.equal(savedProgress().history.length, 0, 'An unfinished chapter is not recorded as completed');
-  assert.equal(savedProgress().storyProgress[story.id], undefined);
+  assert.equal((await savedProgress()).history.length, 0, 'An unfinished chapter is not recorded as completed');
+  assert.equal((await savedProgress()).storyProgress[story.id], undefined);
   await click(button('Resume chapter 1', storyBook(story)));
   assert.equal(storyText(), story.chapters[0].text);
   assert.equal(document.querySelectorAll('.char.correct').length, 4, 'Leaving the reader keeps the unfinished chapter position');
@@ -1111,7 +1161,7 @@ test('stories save chapters once, resume after reload, finish, and replay only w
   await click(button('Start story', storyBook(story)));
   const firstChapter = storyText();
   await typeText(document.querySelector('textarea'), `${firstChapter}x`);
-  let saved = savedProgress();
+  let saved = (await savedProgress());
   assert.equal(saved.history.length, 1, 'Extra keystrokes after completion do not save another result');
   assert.equal(saved.history[0].mode, 'story');
   assert.equal(saved.history[0].storyId, story.id);
@@ -1122,7 +1172,7 @@ test('stories save chapters once, resume after reload, finish, and replay only w
   assert.equal(document.activeElement, button('Next chapter'), 'The result focuses the continuation button');
   await key(document.activeElement, 'Enter');
   assert.equal(storyText(), story.chapters[1].text);
-  assert.equal(savedProgress().history.length, 1, 'Advancing a chapter does not duplicate the result');
+  assert.equal((await savedProgress()).history.length, 1, 'Advancing a chapter does not duplicate the result');
 
   await reload();
   await click(button(/^Stories/, document.querySelector('[aria-label="Main navigation"]')));
@@ -1132,7 +1182,7 @@ test('stories save chapters once, resume after reload, finish, and replay only w
   await key(document.activeElement, 'Enter', { ctrlKey: true });
   assert.equal(storyText(), story.chapters[2].text, 'Ctrl+Enter continues within Stories instead of switching to Type');
   await typeText(document.querySelector('textarea'), storyText());
-  saved = savedProgress();
+  saved = (await savedProgress());
   assert.equal(saved.history.length, 3);
   assert.deepEqual(saved.history.map(run => run.chapterIndex), [2, 1, 0]);
   assert.ok(saved.history.every(run => run.mode === 'story' && run.storyId === story.id));
@@ -1149,10 +1199,10 @@ test('stories save chapters once, resume after reload, finish, and replay only w
   await reload();
   await click(button(/^Stories/, document.querySelector('[aria-label="Main navigation"]')));
   assert.ok(storyBook(story).classList.contains('complete'), 'The finished state survives reload');
-  assert.equal(savedProgress().history.length, 3, 'Reload does not duplicate completed chapters');
+  assert.equal((await savedProgress()).history.length, 3, 'Reload does not duplicate completed chapters');
   await click(button('Read again', storyBook(story)));
   assert.equal(storyText(), story.chapters[0].text, 'Explicit replay returns to the first chapter');
-  assert.equal(savedProgress().storyProgress[story.id].completedChapters, 3, 'Replay preserves previous completion credit');
+  assert.equal((await savedProgress()).storyProgress[story.id].completedChapters, 3, 'Replay preserves previous completion credit');
   await click(button('Story library'));
   await click(button('Progress', document.querySelector('[aria-label="Main navigation"]')));
   assert.match(document.querySelector('tbody').textContent, /The plant manager \/ chapter 3/);
@@ -1167,7 +1217,7 @@ test('restoring a backup merges bookmarks and passage history without losing new
   local.keyStats = { z: { attempts: 9, errors: 3 } };
   local.lessonProgress = { [lesson.id]: { practiceRounds: 2, seenPractice: [lesson.practiceVariants[0]], attempts: 4, bestAccuracy: 100, bestWpm: 30, lastPracticed: '2026-10-21T10:00:00.000Z' } };
   local.storyProgress = { [story.id]: { completedChapters: 2, bestAccuracy: 99, attempts: 2, lastPracticed: '2026-10-21T10:00:00.000Z' } };
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(local));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(local));
   const incoming = emptyProgress();
   incoming.settings.guide = false;
   incoming.history = [local.history[0], run('older', '2026-10-20T10:00:00.000Z')];
@@ -1177,7 +1227,7 @@ test('restoring a backup merges bookmarks and passage history without losing new
   await mountWorkspace();
   await click(button('Progress', document.querySelector('[aria-label="Main navigation"]')));
   await restoreBackup(incoming);
-  const saved = savedProgress();
+  const saved = (await savedProgress());
   assert.deepEqual(saved.history.map(item => item.id), ['newer', 'older']);
   assert.deepEqual(saved.keyStats, { z: { attempts: 12, errors: 3 }, q: { attempts: 8, errors: 4 } });
   assert.equal(saved.settings.guide, false);
@@ -1190,7 +1240,7 @@ test('restoring a backup merges bookmarks and passage history without losing new
   assert.equal(saved.storyProgress[story.id].bestAccuracy, 100);
   assert.equal(saved.storyProgress[story.id].lastPracticed, local.storyProgress[story.id].lastPracticed);
   await restoreBackup(incoming);
-  assert.deepEqual(savedProgress(), saved, 'Restoring the same backup again is idempotent');
+  assert.deepEqual((await savedProgress()), saved, 'Restoring the same backup again is idempotent');
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
   assertLessonRound(lesson, 2, 'The merged course resumes the next unfinished round');
   await click(button(/^Stories/, document.querySelector('[aria-label="Main navigation"]')));
@@ -1199,18 +1249,18 @@ test('restoring a backup merges bookmarks and passage history without losing new
 });
 
 test('invalid and oversized backup restores preserve existing progress and explain the failure', async () => {
-  seedSettings({ guide: false, customText: 'Keep this saved passage.' });
+  (await seedSettings({ guide: false, customText: 'Keep this saved passage.' }));
   await mountWorkspace();
   await click(button('Progress', document.querySelector('[aria-label="Main navigation"]')));
-  const original = savedProgress();
+  const original = (await savedProgress());
   await restoreBackup('{broken');
-  assert.deepEqual(savedProgress(), original);
+  assert.deepEqual((await savedProgress()), original);
   assert.match(document.querySelector('.toast').textContent, /not a valid JSON backup/);
   await restoreBackup({ version: 99, history: [] });
-  assert.deepEqual(savedProgress(), original);
+  assert.deepEqual((await savedProgress()), original);
   assert.match(document.querySelector('.toast').textContent, /not a Typedo backup/);
   await restoreBackup(emptyProgress(), 2_000_001);
-  assert.deepEqual(savedProgress(), original);
+  assert.deepEqual((await savedProgress()), original);
   assert.match(document.querySelector('.toast').textContent, /smaller than 2 MB/);
 });
 
@@ -1230,7 +1280,7 @@ test('personal-best celebrations are limited to tests, not custom practice', asy
   const progress = emptyProgress();
   progress.settings = { ...progress.settings, mode: 'custom', customText: 'ab' };
   progress.history = [{ id: 'previous-custom', date: '2026-10-20T10:00:00.000Z', mode: 'custom', label: 'Custom text', category: 'custom:custom:false:false:false', elapsed: 60000, wpm: 0, raw: 1, accuracy: 100, errors: 0, correct: 2 }];
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   await mountWorkspace();
   await typeText(document.querySelector('[aria-label="Typing input"]'), 'ab');
   assert.doesNotMatch(document.querySelector('.result-title').textContent, /personal best/i);
@@ -1240,15 +1290,15 @@ test('personal-best celebrations are limited to tests, not custom practice', asy
 test('suggested practice uses the learners exact troublesome capital and punctuation', async () => {
   const progress = emptyProgress();
   progress.keyStats = { A: { attempts: 10, errors: 8 }, '?': { attempts: 8, errors: 5 } };
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   await mountWorkspace();
   const suggestion = document.querySelector('[aria-label="Suggested practice"]');
   assert.ok(suggestion, 'Enough recorded mistakes create an actionable practice recommendation');
   assert.match(suggestion.textContent, /A/);
   assert.match(suggestion.textContent, /\?/);
   await click(button('Practice these keys', suggestion));
-  assert.equal(savedProgress().settings.mode, 'practice');
-  assert.equal(savedProgress().settings.lesson, 'weak');
+  assert.equal((await savedProgress()).settings.mode, 'practice');
+  assert.equal((await savedProgress()).settings.lesson, 'weak');
   const prompt = document.querySelector('#accessible-prompt').textContent.replace(/^Text to type: /, '');
   assert.ok(prompt.includes('A'), 'Uppercase mistakes produce uppercase practice');
   assert.ok(prompt.includes('?'), 'The recommended punctuation appears in the passage');
@@ -1259,7 +1309,7 @@ test('the weekly story resumes the saved chapter instead of skipping ahead to to
   const story = STORIES[0];
   const progress = emptyProgress();
   progress.storyProgress = { [story.id]: { completedChapters: 1, bestAccuracy: 98, attempts: 1, lastPracticed: '2026-10-20T10:00:00.000Z' } };
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   await mountWorkspace();
   await click(button(/^Stories/, document.querySelector('[aria-label="Main navigation"]')));
   const feature = document.querySelector('.story-feature');
@@ -1319,7 +1369,7 @@ test('export downloads a complete backup including lesson rounds, story bookmark
   progress.storyProgress = { [STORIES[0].id]: { completedChapters: 1, attempts: 1 } };
   progress.storyDrafts = { [STORIES[0].id]: { runId: 'export-partial-story', chapterIndex: 1, text: STORIES[0].chapters[1].text, typed: 'B', attempts: 2, correctAttempts: 1, keyStats: { B: { attempts: 2, errors: 1 } }, elapsed: 5000, updatedAt: '2026-10-22T10:00:00.000Z' } };
   progress.keyStats = { A: { attempts: 10, errors: 3 }, '?': { attempts: 8, errors: 2 } };
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   let exported;
   let download;
   context.mock.method(URL, 'createObjectURL', blob => { exported = blob; return 'blob:typedo-backup-test'; });
@@ -1328,7 +1378,7 @@ test('export downloads a complete backup including lesson rounds, story bookmark
   await click(button('Progress', document.querySelector('[aria-label="Main navigation"]')));
   await click(button('Export'));
   assert.equal(exported.type, 'application/json');
-  assert.deepEqual(JSON.parse(await exported.text()), savedProgress());
+  assert.deepEqual(JSON.parse(await exported.text()), (await savedProgress()));
   assert.equal(download.href, 'blob:typedo-backup-test');
   assert.match(download.filename, /^typedo-\d{4}-\d{2}-\d{2}\.json$/);
   assert.match(document.querySelector('.toast').textContent, /Progress exported/);
@@ -1343,17 +1393,17 @@ test('an unfinished story preserves typed errors and corrections on reload, then
   let input = document.querySelector('textarea');
   await key(input, 'x');
   await key(input, 'Backspace');
-  assert.equal(savedProgress().storyDrafts[story.id].typed, '', 'An empty cursor position can still contain a meaningful error history');
-  assert.equal(savedProgress().storyDrafts[story.id].attempts, 1);
+  assert.equal((await savedProgress()).storyDrafts[story.id].typed, '', 'An empty cursor position can still contain a meaningful error history');
+  assert.equal((await savedProgress()).storyDrafts[story.id].attempts, 1);
   await typeText(input, text.slice(0, 8));
   await key(input, '@');
-  const draft = savedProgress().storyDrafts[story.id];
+  const draft = (await savedProgress()).storyDrafts[story.id];
   assert.equal(draft.typed, `${text.slice(0, 8)}@`);
   assert.equal(draft.attempts, 10);
   assert.equal(draft.correctAttempts, 8);
-  assert.deepEqual(savedProgress().history, [], 'A partial chapter is not a completed daily session');
-  assert.deepEqual(savedProgress().keyStats, {}, 'Partial key statistics must not be counted globally yet');
-  assert.equal(savedProgress().storyProgress[story.id], undefined);
+  assert.deepEqual((await savedProgress()).history, [], 'A partial chapter is not a completed daily session');
+  assert.deepEqual((await savedProgress()).keyStats, {}, 'Partial key statistics must not be counted globally yet');
+  assert.equal((await savedProgress()).storyProgress[story.id], undefined);
 
   await reload();
   await click(button(/^Stories/, document.querySelector('[aria-label="Main navigation"]')));
@@ -1361,11 +1411,11 @@ test('an unfinished story preserves typed errors and corrections on reload, then
   assert.equal(storyText(), text);
   assert.equal(document.querySelectorAll('.char.correct').length, 8);
   assert.equal(document.querySelectorAll('.char.incorrect').length, 1, 'An uncorrected mistake is restored at the same character');
-  assert.equal(savedProgress().storyDrafts[story.id].runId, draft.runId, 'Resuming keeps the original completion identity');
+  assert.equal((await savedProgress()).storyDrafts[story.id].runId, draft.runId, 'Resuming keeps the original completion identity');
   input = document.querySelector('textarea');
   await key(input, 'Backspace');
   await typeText(input, `${text.slice(8)}x`);
-  const saved = savedProgress();
+  const saved = (await savedProgress());
   assert.equal(saved.history.length, 1);
   assert.equal(saved.history[0].id, draft.runId);
   assert.equal(saved.history[0].errors, 2, 'Correcting before and after reload does not erase either mistake');
@@ -1378,7 +1428,7 @@ test('an unfinished story preserves typed errors and corrections on reload, then
   assert.equal(saved.keyStats[text[0]].errors, 1);
   assert.equal(saved.keyStats[text[8]].errors, 1);
   await reload();
-  assert.equal(savedProgress().history.length, 1, 'Reload cannot complete the same draft again');
+  assert.equal((await savedProgress()).history.length, 1, 'Reload cannot complete the same draft again');
 });
 
 test('story navigation retains a draft while explicit restart clears it', async () => {
@@ -1389,7 +1439,7 @@ test('story navigation retains a draft while explicit restart clears it', async 
   const text = storyText();
   await typeText(document.querySelector('textarea'), text.slice(0, 5));
   await click(button('Story library'));
-  assert.equal(savedProgress().storyDrafts[story.id].typed, text.slice(0, 5));
+  assert.equal((await savedProgress()).storyDrafts[story.id].typed, text.slice(0, 5));
   assert.equal(document.activeElement, button('Resume chapter 1', storyBook(story)), 'Leaving a partial chapter returns focus to its resume button');
   await click(button('Resume chapter 1', storyBook(story)));
   assert.equal(document.querySelectorAll('.char.correct').length, 5);
@@ -1399,14 +1449,14 @@ test('story navigation retains a draft while explicit restart clears it', async 
   assert.equal(document.querySelectorAll('.char.correct').length, 5, 'Main navigation keeps the chapter position too');
   await click(button(/^Restart chapter/));
   await confirmRestartIfAsked();
-  assert.equal(savedProgress().storyDrafts[story.id], undefined, 'Explicit restart removes the saved partial run');
+  assert.equal((await savedProgress()).storyDrafts[story.id], undefined, 'Explicit restart removes the saved partial run');
   assert.equal(document.querySelectorAll('.char.correct, .char.incorrect').length, 0);
   await click(button('Story library'));
   assert.ok(button('Start story', storyBook(story)), 'Restarting an untouched chapter does not leave a misleading resume button');
   assert.equal(document.activeElement, button('Start story', storyBook(story)));
   await reload();
-  assert.equal(savedProgress().storyDrafts[story.id], undefined);
-  assert.equal(savedProgress().history.length, 0);
+  assert.equal((await savedProgress()).storyDrafts[story.id], undefined);
+  assert.equal((await savedProgress()).history.length, 0);
 });
 
 test('restoring a partial story backup resumes its exact position and elapsed typing time', async () => {
@@ -1420,38 +1470,38 @@ test('restoring a partial story backup resumes its exact position and elapsed ty
   await mountWorkspace();
   await click(button('Progress', document.querySelector('[aria-label="Main navigation"]')));
   await restoreBackup(incoming);
-  assert.equal(savedProgress().history.length, 0);
-  assert.deepEqual(savedProgress().keyStats, {});
+  assert.equal((await savedProgress()).history.length, 0);
+  assert.deepEqual((await savedProgress()).keyStats, {});
   await click(button(/^Stories/, document.querySelector('[aria-label="Main navigation"]')));
   await click(button('Resume chapter 1', storyBook(story)));
   assert.equal(document.querySelectorAll('.char.correct').length, 3);
   await typeText(document.querySelector('textarea'), story.chapters[0].text.slice(3));
-  const run = savedProgress().history[0];
+  const run = (await savedProgress()).history[0];
   assert.equal(run.id, 'restored-story-draft');
   assert.equal(run.errors, 1);
   assert.ok(run.elapsed >= 12345, 'Typing time from the backup contributes to the completed result');
   assert.ok(run.elapsed < 60000, 'Time spent away from the saved draft is excluded');
-  assert.equal(savedProgress().storyDrafts[story.id], undefined);
+  assert.equal((await savedProgress()).storyDrafts[story.id], undefined);
 });
 
 test('an unfinished reread resumes without removing the original story completion', async () => {
   const story = STORIES[0];
   const progress = emptyProgress();
   progress.storyProgress = { [story.id]: { completedChapters: story.chapters.length, attempts: 3, bestAccuracy: 100, lastPracticed: '2026-10-20T10:00:00.000Z' } };
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   await mountWorkspace();
   await click(button(/^Stories/, document.querySelector('[aria-label="Main navigation"]')));
   await click(button('Read again', storyBook(story)));
   await typeText(document.querySelector('textarea'), storyText().slice(0, 6));
   await click(button('Story library'));
   assert.ok(button('Resume chapter 1', storyBook(story)), 'A replay draft gets a resume action even when the story was finished before');
-  assert.equal(savedProgress().storyProgress[story.id].completedChapters, story.chapters.length);
+  assert.equal((await savedProgress()).storyProgress[story.id].completedChapters, story.chapters.length);
   await reload();
   await click(button(/^Stories/, document.querySelector('[aria-label="Main navigation"]')));
   await click(button('Resume chapter 1', storyBook(story)));
   assert.equal(document.querySelectorAll('.char.correct').length, 6);
-  assert.equal(savedProgress().history.length, 0, 'A partial reread does not create an extra completed session');
-  assert.equal(savedProgress().storyProgress[story.id].attempts, 3);
+  assert.equal((await savedProgress()).history.length, 0, 'A partial reread does not create an extra completed session');
+  assert.equal((await savedProgress()).storyProgress[story.id].attempts, 3);
 });
 
 test('pagehide immediately saves the latest story time and excludes time away before typing resumes', async context => {
@@ -1464,12 +1514,12 @@ test('pagehide immediately saves the latest story time and excludes time away be
   const text = storyText();
   const input = document.querySelector('textarea');
   await typeText(input, text.slice(0, 2));
-  const elapsedAtLastKey = savedProgress().storyDrafts[story.id].elapsed;
+  const elapsedAtLastKey = (await savedProgress()).storyDrafts[story.id].elapsed;
   clock += 2500;
   let flushed;
   await React.act(async () => {
     window.dispatchEvent(new dom.window.Event('pagehide'));
-    flushed = savedProgress().storyDrafts[story.id];
+    flushed = (await savedProgress()).storyDrafts[story.id];
   });
   assert.equal(flushed.typed, text.slice(0, 2));
   assert.ok(flushed.elapsed >= elapsedAtLastKey + 2500, 'Leaving the page flushes the time since the last key synchronously');
@@ -1477,29 +1527,29 @@ test('pagehide immediately saves the latest story time and excludes time away be
 
   clock += 3600000;
   await key(input, 'Backspace');
-  assert.equal(savedProgress().storyDrafts[story.id].elapsed, flushed.elapsed, 'Backspace corrections while paused do not restart the clock');
-  assert.equal(savedProgress().storyDrafts[story.id].typed, flushed.typed, 'Paused input cannot alter the saved position');
+  assert.equal((await savedProgress()).storyDrafts[story.id].elapsed, flushed.elapsed, 'Backspace corrections while paused do not restart the clock');
+  assert.equal((await savedProgress()).storyDrafts[story.id].typed, flushed.typed, 'Paused input cannot alter the saved position');
   await click(button('Resume typing', document.querySelector('dialog')));
   await key(input, 'Backspace');
   await key(input, text[1]);
-  const resumed = savedProgress().storyDrafts[story.id];
+  const resumed = (await savedProgress()).storyDrafts[story.id];
   assert.equal(resumed.elapsed, flushed.elapsed, 'The first new printable key resumes at the preserved elapsed time');
   clock += 500;
   await key(input, text[2]);
-  const afterTyping = savedProgress().storyDrafts[story.id];
+  const afterTyping = (await savedProgress()).storyDrafts[story.id];
   assert.ok(afterTyping.elapsed >= flushed.elapsed + 500);
   assert.ok(afterTyping.elapsed < flushed.elapsed + 1000, 'The hidden hour never contributes to story speed');
   clock += 250;
   await React.act(async () => window.dispatchEvent(new dom.window.Event('blur')));
-  assert.ok(savedProgress().storyDrafts[story.id].elapsed >= afterTyping.elapsed + 250, 'Switching away from the window also flushes and pauses');
+  assert.ok((await savedProgress()).storyDrafts[story.id].elapsed >= afterTyping.elapsed + 250, 'Switching away from the window also flushes and pauses');
   assert.match(document.querySelector('.story-session-state').textContent, /PAUSED/);
-  assert.deepEqual(savedProgress().history, []);
+  assert.deepEqual((await savedProgress()).history, []);
 });
 
 test('when device storage fails, partial stories stay usable and exportable without claiming to be saved', async context => {
   const story = STORIES[0];
   let exported;
-  context.mock.method(dom.window.Storage.prototype, 'setItem', () => { throw new Error('Storage denied'); });
+  context.mock.method(storage, 'setItem', async () => { throw new Error('Storage denied'); });
   context.mock.method(URL, 'createObjectURL', blob => { exported = blob; return 'blob:unsaved-story-backup-test'; });
   context.mock.method(dom.window.HTMLAnchorElement.prototype, 'click', () => {});
   await mountWorkspace();
@@ -1520,14 +1570,14 @@ test('when device storage fails, partial stories stay usable and exportable with
   const backup = JSON.parse(await exported.text());
   assert.equal(backup.storyDrafts[story.id].typed, text.slice(0, 4));
   assert.equal(backup.history.length, 0);
-  assert.equal(dom.window.localStorage.length, 0, 'The test really exercised unavailable persistence');
+  assert.equal(await readSaved(STORAGE_KEY), null, 'The test really exercised unavailable persistence');
 });
 
 test('failed optional tests can continue learning without repeating completed practice', async () => {
   const progress = emptyProgress();
   const lesson = LESSON_COURSE[0];
   progress.lessonProgress = { [lesson.id]: { practiceRounds: 3, attempts: 3 } };
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   await mountWorkspace();
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
   await click([...document.querySelectorAll('.lesson-course-card')].find(card => card.textContent.includes(lesson.title)));
@@ -1537,15 +1587,15 @@ test('failed optional tests can continue learning without repeating completed pr
   assert.equal(document.activeElement, button('Next lesson'));
   await key(document.activeElement, 'Enter');
   assert.match(document.querySelector('.lesson-workspace-heading').textContent, new RegExp(LESSON_COURSE[1].title));
-  assert.equal(savedProgress().lessonProgress[lesson.id].practiceRounds, 3);
-  assert.equal(savedProgress().history.length, 1, 'Continuing does not create a repeated practice completion');
+  assert.equal((await savedProgress()).lessonProgress[lesson.id].practiceRounds, 3);
+  assert.equal((await savedProgress()).history.length, 1, 'Continuing does not create a repeated practice completion');
 });
 
 test('a failed optional test resumes unfinished practice and course completion keeps keyboard focus', async () => {
   const progress = emptyProgress();
   const lesson = LESSON_COURSE[0];
   progress.lessonProgress = { [lesson.id]: { practiceRounds: 1, attempts: 1 } };
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   await mountWorkspace();
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
   await click(button('Optional test'));
@@ -1558,7 +1608,7 @@ test('a failed optional test resumes unfinished practice and course completion k
   root = null;
   const almostDone = emptyProgress();
   almostDone.lessonProgress = Object.fromEntries(LESSON_COURSE.map((item, index) => [item.id, { practiceRounds: index === LESSON_COURSE.length - 1 ? 2 : 3, attempts: 3 }]));
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(almostDone));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(almostDone));
   await mountWorkspace();
   await click(button(/^Lessons/, document.querySelector('[aria-label="Main navigation"]')));
   await typeText(document.querySelector('textarea'), lessonText());
@@ -1573,17 +1623,17 @@ test('a reread resumes at chapter boundaries after leaving and reloading', async
   const story = STORIES[0];
   const progress = emptyProgress();
   progress.storyProgress = { [story.id]: { completedChapters: 3, attempts: 3, bestAccuracy: 100, lastPracticed: '2026-10-20T00:00:00.000Z' } };
-  dom.window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
   await mountWorkspace();
   await click(button(/^Stories/, document.querySelector('[aria-label="Main navigation"]')));
   await click(button('Read again', storyBook(story)));
   for (let chapterIndex = 0; chapterIndex < story.chapters.length; chapterIndex++) {
     assert.equal(storyText(), story.chapters[chapterIndex].text);
     await typeText(document.querySelector('textarea'), storyText());
-    assert.equal(savedProgress().storyProgress[story.id].completedChapters, 3);
-    assert.equal(savedProgress().storyDrafts[story.id], undefined);
+    assert.equal((await savedProgress()).storyProgress[story.id].completedChapters, 3);
+    assert.equal((await savedProgress()).storyDrafts[story.id], undefined);
     if (chapterIndex < story.chapters.length - 1) {
-      assert.equal(savedProgress().storyProgress[story.id].replayChapter, chapterIndex + 1);
+      assert.equal((await savedProgress()).storyProgress[story.id].replayChapter, chapterIndex + 1);
       await click(button('Finish for now'));
       assert.ok(button(`Resume chapter ${chapterIndex + 2}`, storyBook(story)));
       assert.equal(document.activeElement, button(`Resume chapter ${chapterIndex + 2}`, storyBook(story)), 'Chapter-boundary navigation preserves a useful keyboard position');
@@ -1592,8 +1642,8 @@ test('a reread resumes at chapter boundaries after leaving and reloading', async
       await click(button(`Resume chapter ${chapterIndex + 2}`, storyBook(story)));
     }
   }
-  assert.equal(savedProgress().storyProgress[story.id].replayChapter, undefined);
-  assert.equal(savedProgress().history.length, 3);
+  assert.equal((await savedProgress()).storyProgress[story.id].replayChapter, undefined);
+  assert.equal((await savedProgress()).history.length, 3);
   assert.equal(document.activeElement, button('Choose another story'));
   await key(document.activeElement, 'Enter');
   assert.ok(button('Read again', storyBook(story)));
@@ -1602,12 +1652,12 @@ test('a reread resumes at chapter boundaries after leaving and reloading', async
 
 test('unreadable saves survive startup and typing until a valid backup is explicitly restored', async context => {
   const raw = JSON.stringify({ version: 2, history: [{ note: 'Preserve this newer save.' }] }, null, 2) + '\n';
-  dom.window.localStorage.setItem(STORAGE_KEY, raw);
+  await storage.setItem(STORAGE_KEY, raw);
   const downloads = [];
   context.mock.method(URL, 'createObjectURL', blob => { downloads.push(blob); return 'blob:typedo-recovery-test'; });
   context.mock.method(dom.window.HTMLAnchorElement.prototype, 'click', () => {});
-  await mountWorkspace(() => React.createElement(React.StrictMode, null, React.createElement(App)));
-  assert.equal(dom.window.localStorage.getItem(STORAGE_KEY), raw);
+  await mountWorkspace(() => React.createElement(React.StrictMode, null, React.createElement(App, { storage })));
+  assert.equal((await readSaved(STORAGE_KEY)), raw);
   assert.match(document.querySelector('.warning').textContent, /Automatic saving is paused/);
   await click(button('Download original save'));
   assert.equal(await downloads[0].text(), raw, 'The original can be recovered byte for byte');
@@ -1615,16 +1665,16 @@ test('unreadable saves survive startup and typing until a valid backup is explic
   await click(button('Word practice'));
   const text = document.querySelector('#accessible-prompt').textContent.replace(/^Text to type: /, '');
   await typeText(document.querySelector('[aria-label="Typing input"]'), text);
-  assert.equal(dom.window.localStorage.getItem(STORAGE_KEY), raw, 'New work cannot overwrite the unreadable original automatically');
+  assert.equal((await readSaved(STORAGE_KEY)), raw, 'New work cannot overwrite the unreadable original automatically');
   await click(button('Progress', document.querySelector('[aria-label="Main navigation"]')));
   await click(button('Export'));
   const current = JSON.parse(await downloads[1].text());
   assert.equal(current.history.length, 1, 'The current session can still be exported');
   await restoreBackup('{still invalid');
-  assert.equal(dom.window.localStorage.getItem(STORAGE_KEY), raw, 'A failed restore cannot lift recovery protection');
+  assert.equal((await readSaved(STORAGE_KEY)), raw, 'A failed restore cannot lift recovery protection');
   await restoreBackup(emptyProgress());
-  assert.equal(savedProgress().version, 1);
-  assert.equal(savedProgress().history.length, 1, 'Valid recovery keeps the work completed during this visit');
+  assert.equal((await savedProgress()).version, 1);
+  assert.equal((await savedProgress()).history.length, 1, 'Valid recovery keeps the work completed during this visit');
   assert.equal(document.querySelector('.warning'), null);
   assert.match(document.querySelector('footer').textContent, /Saved locally/);
 });

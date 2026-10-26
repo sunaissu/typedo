@@ -6,7 +6,7 @@ import './home.css';
 import OfflineStatus from './OfflineStatus.jsx';
 import Milestones from './Milestones.jsx';
 
-export default function Start({ hasPractice, lessonStarted, courseComplete, reviewCount = 0, storageAvailable, onLessons, onTest, onStories, onProgress, onRestore, progress = {}, onContinueActivity, onPracticeWeak, onSettingsChange, onPracticeLibrary, onDiagnostic }) {
+export default function Start({ hasPractice, lessonStarted, courseComplete, reviewCount = 0, storageAvailable, storageSaving = false, onLessons, onTest, onStories, onProgress, onRestore, progress = {}, onContinueActivity, onPracticeWeak, onSettingsChange, onPracticeLibrary, onDiagnostic }) {
   const heading = useRef(null);
   useEffect(() => { heading.current?.focus({ preventScroll: true }); }, []);
   const recommendation = getHomeRecommendation(progress);
@@ -41,7 +41,7 @@ export default function Start({ hasPractice, lessonStarted, courseComplete, revi
       {recommendation.preview && <p className="home-draft-preview">{recommendation.preview}</p>}
       <p>{recommendation.reason}</p>
       <button className="primary-button" onClick={() => continueActivity(recommendation)}>{recommendation.action}<ArrowRight size={17} /></button>
-      <span className="start-detail">{recommendation.draft ? storageAvailable ? 'Your place is saved in this browser.' : 'Your place is kept for this visit. Export a backup before leaving.' : 'Start typing when the passage opens. Escape pauses your practice.'}</span>
+      <span className="start-detail">{recommendation.draft ? storageSaving ? 'Saving your place…' : storageAvailable ? 'Your place is saved in this browser.' : 'Your place is kept for this visit. Export a backup before leaving.' : 'Start typing when the passage opens. Escape pauses your practice.'}</span>
       {onDiagnostic && !recommendation.draft && <button className="text-button home-diagnostic-link" onClick={onDiagnostic}>Not sure where to start? Try the optional starting check<ArrowRight size={15} /></button>}
     </section>
 
@@ -99,7 +99,7 @@ export default function Start({ hasPractice, lessonStarted, courseComplete, revi
     {hasPractice && <Milestones progress={progress} onSettingsChange={onSettingsChange} onProgress={onProgress} />}
     <OfflineStatus />
     <div className="start-notes">
-      <p><ShieldCheck size={17} /><span>{storageAvailable ? 'No account needed. Progress stays in this browser. Export a backup from Progress to keep a copy or move to another device.' : 'Browser saving is unavailable or paused. You can practise, then export your progress before closing this page.'}</span></p>
+      <p><ShieldCheck size={17} /><span>{storageSaving ? 'Saving your progress in this browser…' : storageAvailable ? 'No account needed. Progress stays in this browser. Export a backup from Progress to keep a copy or move to another device.' : 'Browser saving is unavailable or paused. You can practise, then export your progress before closing this page.'}</span></p>
       <button className="text-button" onClick={hasPractice ? onProgress : onRestore}>{hasPractice ? 'Back up or restore progress' : 'Restore progress from a backup'}<ArrowRight size={14} /></button>
     </div>
   </div>;

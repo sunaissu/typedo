@@ -29,11 +29,11 @@ export function Dialog({ title, onClose, children }) {
   </dialog>;
 }
 
-export default function PauseDialog({ onResume, onFinish, onRestart, interrupted = false, storageAvailable = true }) {
+export default function PauseDialog({ onResume, onFinish, onRestart, interrupted = false, storageAvailable = true, storageSaving = false }) {
   return <Dialog title="Practice paused" onClose={onResume}>
     <p className="pause-symbol"><Pause size={26} aria-hidden="true" /></p>
     <p>Your place is kept. Take your time.</p>
-    <p className="panel-note">{storageAvailable ? 'Your unfinished practice is saved in this browser.' : 'Kept for this visit. Export your progress before closing the app.'}</p>
+    <p className="panel-note">{storageSaving ? 'Saving your unfinished practice…' : storageAvailable ? 'Your unfinished practice is saved in this browser.' : 'Kept for this visit. Export your progress before closing the app.'}</p>
     {interrupted && <p className="interrupted-note">This attempt will count as practice. Start a fresh test for a personal best or assessment result.</p>}
     <div className="pause-actions"><button data-autofocus className="primary-button" onClick={onResume}>Resume typing<ArrowRight size={16} /></button><button className="secondary-button" onClick={onFinish}>Finish for now</button><button className="text-button" onClick={onRestart}><RotateCcw size={15} />Restart</button></div>
     <p className="panel-note">The clock starts again with your next typed character.</p>

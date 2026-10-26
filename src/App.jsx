@@ -19,11 +19,22 @@ import TestSetup from './TestSetup.jsx';
 import { LESSON_COURSE, applyLessonResult, lessonPracticeComplete, sanitizeLessonProgress } from './lessons.js';
 import { applyLessonLearningResult, getDueLessonReviews } from './lessonLearning.js';
 import { LESSONS, createSession, enterKey, generateText, getPracticeRecommendation, localDay, mergeKeyStats, metrics, pauseSession, resumeSession, streak, tick, weakKeys } from './typing.js';
-import { STORAGE_KEY, discardedDraftsNotice, emptyProgress, mergeProgress, readProgress, validateProgress, writeProgress } from './storage.js';
+import { STORAGE_KEY, discardedDraftsNotice, mergeProgress, readProgress, validateProgress, writeProgress } from './storage.js';
+import { browserStorage } from './browserStorage.js';
 
-function initialData(storageKey) {
-  try { return readProgress(window.localStorage, storageKey); }
-  catch { return { progress: emptyProgress(), warning: 'Browser storage is unavailable. Export your progress before leaving.', writeBlocked: true, recoveryRaw: null }; }
+export default function App(props) {
+  return <LoadProfile key={props.storageKey || STORAGE_KEY} {...props} />;
+}
+
+function LoadProfile({ storageKey = STORAGE_KEY, storage = browserStorage, ...props }) {
+  const [initial, setInitial] = useState(null);
+  useEffect(() => {
+    let active = true;
+    readProgress(storage, storageKey).then(value => { if (active) setInitial(value); });
+    return () => { active = false; };
+  }, [storage, storageKey]);
+  if (!initial) return <main className="storage-loading" role="status">Loading your progress…</main>;
+  return <Workspace {...props} storageKey={storageKey} storage={storage} initial={initial} />;
 }
 
 function Toggle({ checked, onChange, children }) {
@@ -46,11 +57,18 @@ const modeLabel = settings => settings.mode === 'time' ? `${settings.duration}s 
 const category = workspaceKey;
 const formatSeconds = value => `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, '0')}`;
 
-export default function App({ storageKey = STORAGE_KEY, profileName, onManageProfiles, externalSuspended = false }) {
-  const [initial] = useState(() => initialData(storageKey));
+function Workspace({ storageKey, storage, initial, profileName, onManageProfiles, externalSuspended = false }) {
   const [progress, setProgress] = useState(initial.progress);
   const [warning, setWarning] = useState(initial.warning);
-  const [storageAvailable, setStorageAvailable] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(initial.writeBlocked ? 'unavailable' : 'saving');
+  const storageAvailable = saveStatus === 'saved';
+  const storageSaving = saveStatus === 'saving';
+  const saveRevision = useRef(0);
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
   const [recoveryRaw, setRecoveryRaw] = useState(initial.recoveryRaw);
   const writeBlockedRef = useRef(initial.writeBlocked === true);
   const settings = progress.settings;
@@ -145,13 +163,15 @@ export default function App({ storageKey = STORAGE_KEY, profileName, onManagePro
     } else reset(options);
   }
 
-  function persistProgress(value) {
-    if (writeBlockedRef.current) { setStorageAvailable(false); return; }
-    let message;
-    try { message = writeProgress(window.localStorage, value, storageKey); }
-    catch { message = 'Browser storage is unavailable. Export your progress before leaving.'; }
-    setStorageAvailable(!message);
+  async function persistProgress(value) {
+    if (writeBlockedRef.current) { if (mountedRef.current) setSaveStatus('unavailable'); return false; }
+    const revision = ++saveRevision.current;
+    if (mountedRef.current) setSaveStatus('saving');
+    const message = await writeProgress(storage, value, storageKey);
+    if (!mountedRef.current || revision !== saveRevision.current) return !message;
+    setSaveStatus(message ? 'unavailable' : 'saved');
     if (message) setWarning(message);
+    return !message;
   }
   useEffect(() => { persistProgress(progress); }, [progress]);
   useEffect(() => {
@@ -441,16 +461,16 @@ export default function App({ storageKey = STORAGE_KEY, profileName, onManagePro
       </nav>
       <button className={view === 'library' ? 'library-nav active' : 'library-nav'} onClick={() => navigate('library')}><BookOpen size={17} />Practice library</button>
       <button className="library-nav" onClick={() => navigate('challenges')}>Personal challenges</button><button className="sidebar-course" onClick={() => navigate('lessons')}><span><BookOpen size={14} />TOUCH TYPING</span><strong>{completedLessons} / {LESSON_COURSE.length} lessons completed</strong><small>Continue learning<ArrowRight size={12} /></small></button>
-      <div className="sidebar-bottom">{onManageProfiles && <button disabled={!storageAvailable} title={storageAvailable ? undefined : "Restore browser saving before switching profiles. Export your current work from Progress."} onClick={onManageProfiles} aria-label="Manage local profiles">Profile: {profileName}</button>}
+      <div className="sidebar-bottom">{onManageProfiles && <button disabled={!storageAvailable} title={storageSaving ? "Saving your progress…" : storageAvailable ? undefined : "Restore browser saving before switching profiles. Export your current work from Progress."} onClick={() => onManageProfiles(() => persistProgress(progressRef.current))} aria-label="Manage local profiles">Profile: {profileName}</button>}
         <button aria-label="Settings" onClick={() => openModal('settings')}><Settings2 size={17} />Settings</button>
         <button aria-label={settings.theme === 'dark' ? 'Use light theme' : 'Use dark theme'} onClick={() => changeSettings({ theme: settings.theme === 'light' ? 'dark' : 'light', themeRevision: 2 }, false)}>{settings.theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}{settings.theme === 'dark' ? 'Light mode' : 'Dark mode'}</button>
       </div>
-      <div className="sidebar-local"><span className="tiny-dot" />{storageAvailable ? 'Saved in this browser' : 'Kept for this visit'}</div>
+      <div className="sidebar-local"><span className="tiny-dot" />{storageSaving ? 'Saving…' : storageAvailable ? 'Saved in this browser' : 'Kept for this visit'}</div>
     </header>
 
     <main id="main-content" tabIndex={-1}>
       {warning && <div role="status" className="warning">{warning}{typeof recoveryRaw === 'string' && <button className="text-button" onClick={exportOriginalSave}>Download original save</button>}<button aria-label="Dismiss storage message" onClick={() => setWarning('')}><X size={16} /></button></div>}
-      {view === 'start' ? <Start onDiagnostic={() => navigate('diagnostic')} progress={progress} onContinueActivity={continueActivity} onPracticeWeak={practiceWeak} onPracticeLibrary={() => navigate('library')} onSettingsChange={patch => changeSettings(patch, false)} reviewCount={getDueLessonReviews(progress.lessonLearning || {}, progress.lessonProgress || {}).length} hasPractice={hasPractice} lessonStarted={lessonStarted} courseComplete={completedLessons === LESSON_COURSE.length} storageAvailable={storageAvailable} onLessons={() => navigate('lessons')} onTest={startQuickTest} onStories={() => navigate('stories')} onProgress={() => navigate('progress')} onRestore={() => uploadRef.current.click()} /> : view === 'type' ? <>
+      {view === 'start' ? <Start onDiagnostic={() => navigate('diagnostic')} progress={progress} onContinueActivity={continueActivity} onPracticeWeak={practiceWeak} onPracticeLibrary={() => navigate('library')} onSettingsChange={patch => changeSettings(patch, false)} reviewCount={getDueLessonReviews(progress.lessonLearning || {}, progress.lessonProgress || {}).length} hasPractice={hasPractice} lessonStarted={lessonStarted} courseComplete={completedLessons === LESSON_COURSE.length} storageAvailable={storageAvailable} storageSaving={storageSaving} onLessons={() => navigate('lessons')} onTest={startQuickTest} onStories={() => navigate('stories')} onProgress={() => navigate('progress')} onRestore={() => uploadRef.current.click()} /> : view === 'type' ? <>
         <section className="intro"><div><div className="eyebrow"><span />TYPING WORKSPACE</div><h1>{settings.mode === 'practice' ? 'Word practice' : settings.mode === 'custom' ? 'Custom text' : 'Typing test'}</h1><p>Build confidence with real words. Keep the finger guide as long as you need it.</p></div><div className="daily-goal"><div className="goal-ring" style={{ '--fill': `${Math.min(1, todayRuns.reduce((sum, run) => sum + run.elapsed, 0) / (settings.dailyMinutes * 60000)) * 360}deg` }}><Leaf size={19} /></div><div><strong>Daily practice</strong><span>{Math.floor(todayRuns.reduce((sum, run) => sum + run.elapsed, 0) / 60000)} of {settings.dailyMinutes} minutes today</span></div></div></section>
 
         <div className="workspace-controls"><div className="mode-tabs" aria-label="Typing mode">
@@ -486,7 +506,7 @@ export default function App({ storageKey = STORAGE_KEY, profileName, onManagePro
           </div>{settings.guide && <TypingCoach next={session.text[session.typed.length]} />}</div>}
           {settings.mode === 'practice' && <WordProgress text={session.text} typed={session.typed} />}
 
-          <div className="typing-bottomline"><span id="typing-instructions">{capsLock && !finished ? <span className="caps-warning">Caps Lock is on</span> : finished ? <><ShieldCheck size={14} />{storageAvailable ? 'Progress saved in this browser' : 'Session complete · export to keep it'}</> : running ? settings.mode === 'practice' && settings.strict ? 'Take your time. Correct each key to continue.' : 'Timer running. Backspace to correct a character.' : <><span className="mini-caret" />{session.status === 'paused' ? 'Paused. Choose Resume typing when ready.' : focused ? 'Start typing to begin' : 'Use Return to typing to begin'}<span className="desktop-note"> · use a physical keyboard</span></>}</span><div><button className="icon-button" aria-label={settings.sound ? 'Mute key sounds' : 'Enable key sounds'} onClick={() => changeSettings({ sound: !settings.sound }, false)}>{settings.sound ? <Volume2 size={16} /> : <VolumeX size={16} />}</button><button className="icon-button focus-button" aria-label={focusMode ? 'Exit focus mode' : 'Enter focus mode'} onClick={() => setFocusMode(!focusMode)}><Target size={16} /></button><button className="restart-button" ref={finished ? undefined : restartRef} onClick={() => requestRestart()} aria-keyshortcuts="Shift+Enter" title="Restart (Shift+Enter)"><RotateCcw size={16} />Restart</button></div></div>
+          <div className="typing-bottomline"><span id="typing-instructions">{capsLock && !finished ? <span className="caps-warning">Caps Lock is on</span> : finished ? <><ShieldCheck size={14} />{storageSaving ? 'Saving progress…' : storageAvailable ? 'Progress saved in this browser' : 'Session complete · export to keep it'}</> : running ? settings.mode === 'practice' && settings.strict ? 'Take your time. Correct each key to continue.' : 'Timer running. Backspace to correct a character.' : <><span className="mini-caret" />{session.status === 'paused' ? 'Paused. Choose Resume typing when ready.' : focused ? 'Start typing to begin' : 'Use Return to typing to begin'}<span className="desktop-note"> · use a physical keyboard</span></>}</span><div><button className="icon-button" aria-label={settings.sound ? 'Mute key sounds' : 'Enable key sounds'} onClick={() => changeSettings({ sound: !settings.sound }, false)}>{settings.sound ? <Volume2 size={16} /> : <VolumeX size={16} />}</button><button className="icon-button focus-button" aria-label={focusMode ? 'Exit focus mode' : 'Enter focus mode'} onClick={() => setFocusMode(!focusMode)}><Target size={16} /></button><button className="restart-button" ref={finished ? undefined : restartRef} onClick={() => requestRestart()} aria-keyshortcuts="Shift+Enter" title="Restart (Shift+Enter)"><RotateCcw size={16} />Restart</button></div></div>
           <div className="typing-progress"><div style={{ width: `${Math.min(100, completion * 100)}%` }} /></div>
         </section>
         <div className="under-test"><div><kbd>Esc</kbd><span>pause</span><i /><kbd>Shift</kbd> + <kbd>Enter</kbd><span>retry</span><i /><kbd>Backspace</kbd><span>correct</span></div>{!settings.guide ? <button className="text-button" onClick={() => changeSettings({ guide: true }, false)}>Show finger guide</button> : <span className="gentle-hint">Focus on accuracy before speed.</span>}</div>
@@ -498,7 +518,7 @@ export default function App({ storageKey = STORAGE_KEY, profileName, onManagePro
         <section className="lesson-entry"><div><BookOpen size={20} /><div><strong>Learn touch typing</strong><p>Short guided rounds that move forward. Accuracy tests are optional.</p></div></div><button onClick={() => navigate('lessons')}>Open lessons<ArrowRight size={15} /></button></section>
         <section className="lesson-entry"><div><BookOpen size={20} /><div><strong>Type a story</strong><p>Original comedies, one short chapter at a time.</p></div></div><button onClick={() => navigate('stories')}>Open stories<ArrowRight size={15} /></button></section>
         <div className="bottom-stats"><div><span className="stat-icon"><Flame size={18} /></span><div><strong>{currentStreak} day{currentStreak !== 1 ? 's' : ''}</strong><span>current streak</span></div></div><div><span className="stat-icon"><Award size={18} /></span><div><strong>{best === null ? 'No personal best yet' : `${best} wpm`}</strong><span>{best === null ? 'complete a test to set your best' : 'personal best · all tests'}</span></div></div><button onClick={() => navigate('progress')}><span className="stat-icon"><Activity size={18} /></span><div><strong>Session history</strong><span>{progress.history.length} completed session{progress.history.length !== 1 ? 's' : ''}</span></div><ArrowUpRight size={18} /></button></div>
-      </> : view === 'lessons' ? <Lessons initialPracticeKind={activityRequest?.review ? 'review' : 'lesson'} initialLessonId={activityRequest?.view === 'lessons' ? activityRequest.id : undefined} lessonDrafts={progress.lessonDrafts || {}} onDraftChange={saveLessonDraft} storageAvailable={storageAvailable} suspended={Boolean(modal) || externalSuspended} lessonLearning={progress.lessonLearning || {}} keyStats={progress.keyStats} lessonTheme={settings.lessonTheme} lessonLength={settings.lessonLength} onPreferencesChange={patch => changeSettings(patch, false)} onStop={() => navigate('start')} guideEnabled={settings.guide} onGuideChange={guide => changeSettings({ guide }, false)} lessonProgress={progress.lessonProgress || {}} onComplete={completeLesson} onBack={() => navigate('type')} onStories={() => navigate('stories')} /> : view === 'stories' ? <Stories initialStoryId={activityRequest?.view === 'stories' ? activityRequest.id : undefined} suspended={Boolean(modal) || externalSuspended} storyDrafts={progress.storyDrafts || {}} onDraftChange={saveStoryDraft} storageAvailable={storageAvailable} guideEnabled={settings.guide} onGuideChange={guide => changeSettings({ guide }, false)} storyProgress={progress.storyProgress || {}} onComplete={completeStory} onBack={() => navigate('start')} /> : view === 'challenges' ? <Challenges initialChallenge={sharedChallenge} history={progress.history} onComplete={completeChallenge} onBack={() => navigate('start')} suspended={Boolean(modal) || externalSuspended} /> : view === 'diagnostic' ? <Diagnostic onChooseLesson={id => continueActivity({ view: 'lessons', id })} onBack={() => navigate('start')} suspended={Boolean(modal) || externalSuspended} /> : view === 'library' ? <PracticeLibrary passages={progress.savedPassages || []} onSave={savedPassages => updateProgress(current => ({ ...current, savedPassages: sanitizeSavedPassages(savedPassages) }))} onUse={(text, title) => { navigate('type'); useCustomText(text); setNotice(`Ready to practice: ${title}`); requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true })); }} /> : <>
+      </> : view === 'lessons' ? <Lessons initialPracticeKind={activityRequest?.review ? 'review' : 'lesson'} initialLessonId={activityRequest?.view === 'lessons' ? activityRequest.id : undefined} lessonDrafts={progress.lessonDrafts || {}} onDraftChange={saveLessonDraft} storageAvailable={storageAvailable} storageSaving={storageSaving} suspended={Boolean(modal) || externalSuspended} lessonLearning={progress.lessonLearning || {}} keyStats={progress.keyStats} lessonTheme={settings.lessonTheme} lessonLength={settings.lessonLength} onPreferencesChange={patch => changeSettings(patch, false)} onStop={() => navigate('start')} guideEnabled={settings.guide} onGuideChange={guide => changeSettings({ guide }, false)} lessonProgress={progress.lessonProgress || {}} onComplete={completeLesson} onBack={() => navigate('type')} onStories={() => navigate('stories')} /> : view === 'stories' ? <Stories initialStoryId={activityRequest?.view === 'stories' ? activityRequest.id : undefined} suspended={Boolean(modal) || externalSuspended} storyDrafts={progress.storyDrafts || {}} onDraftChange={saveStoryDraft} storageAvailable={storageAvailable} storageSaving={storageSaving} guideEnabled={settings.guide} onGuideChange={guide => changeSettings({ guide }, false)} storyProgress={progress.storyProgress || {}} onComplete={completeStory} onBack={() => navigate('start')} /> : view === 'challenges' ? <Challenges initialChallenge={sharedChallenge} history={progress.history} onComplete={completeChallenge} onBack={() => navigate('start')} suspended={Boolean(modal) || externalSuspended} /> : view === 'diagnostic' ? <Diagnostic onChooseLesson={id => continueActivity({ view: 'lessons', id })} onBack={() => navigate('start')} suspended={Boolean(modal) || externalSuspended} /> : view === 'library' ? <PracticeLibrary passages={progress.savedPassages || []} onSave={savedPassages => updateProgress(current => ({ ...current, savedPassages: sanitizeSavedPassages(savedPassages) }))} onUse={(text, title) => { navigate('type'); useCustomText(text); setNotice(`Ready to practice: ${title}`); requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true })); }} /> : <>
         <section className="intro progress-intro"><div><button className="text-button back-link" onClick={() => navigate('type')}><ArrowLeft size={15} />Back to typing</button><h1 tabIndex={-1}>Your progress</h1><p>Review completed sessions and the keys you miss most.</p></div><div className="backup-buttons"><button className="secondary-button" onClick={exportProgress}><ArrowDownToLine size={15} />Export</button><button className="secondary-button" onClick={() => uploadRef.current.click()}><Upload size={15} />Restore</button></div></section>
         <div className="progress-stats">{[{ icon: Award, value: best === null ? '—' : best, unit: 'wpm', title: 'Best test speed' }, { icon: Target, value: averageAccuracy === null ? '—' : averageAccuracy, unit: '%', title: 'Average accuracy' }, { icon: KeyboardIcon, value: progress.history.length, unit: '', title: 'Sessions completed' }, { icon: Flame, value: currentStreak, unit: 'days', title: 'Current streak' }].map(({ icon: Icon, value, unit, title }) => <div key={title}><Icon size={19} /><strong>{value}<small>{unit}</small></strong><span>{title}</span></div>)}</div>
         <div className="progress-columns"><section className="panel"><div className="section-heading"><h2>Your typing pace</h2><span>{comparableTests.length} comparable tests</span></div>{testHistory.length ? <><label className="comparison-control">Compare the same test<select value={comparisonCategory} onChange={event => setComparison(event.target.value)}>{[...new Map(testHistory.map(run => [run.category, run])).values()].map(run => <option key={run.category} value={run.category}>{run.label} · {run.category.split(':')[2] === 'true' ? 'with punctuation' : 'no punctuation'} · {run.category.split(':')[3] === 'true' ? 'with numbers' : 'no numbers'}</option>)}</select></label><Chart data={comparableTests.slice(0, 20).reverse().map(run => run.wpm)} height={160} /><div className="chart-labels"><span>older</span><span>latest</span></div><p className="panel-note">Same format and settings. Paused attempts are excluded. Typical speed: {medianSpeed} wpm.</p></> : <div className="empty-chart"><Activity size={28} /><h3>No test results yet</h3><p>Finish a typing test to see your pace here.</p><button className="text-button" onClick={() => { navigate('type'); changeSettings({ mode: 'time' }); }}>Take a test<ArrowRight size={15} /></button></div>}</section><section className="panel weak-panel"><div className="section-heading"><h2>Keys to practice</h2><Sparkles size={17} /></div>{weaknesses.length ? <><p>These keys could use some attention.</p><div className="weak-keys">{weaknesses.map(item => <div key={item.key}><kbd>{item.key}</kbd><span>{Math.round((1 - item.errors / item.attempts) * 100)}%</span></div>)}</div><button className="primary-button" onClick={practiceWeak}>Practice these keys<ArrowRight size={15} /></button></> : <><div className="weak-empty"><Hand size={34} /><p>Finish a session and we’ll find the keys worth practicing.</p></div><button className="secondary-button" onClick={practiceWeak}>Try finger practice<ArrowRight size={15} /></button></>}</section></div>
@@ -507,10 +527,10 @@ export default function App({ storageKey = STORAGE_KEY, profileName, onManagePro
       </>}
     </main>
     <input ref={uploadRef} hidden type="file" accept=".json,application/json" onChange={importProgress} aria-label="Restore a Typedo backup" />
-    <footer><span><span className="footer-mark">t.</span> Typing workspace</span><div><span><span className="tiny-dot" />{storageAvailable ? 'Saved locally' : 'Session only'}</span><button onClick={() => openModal('help')}>Keyboard shortcuts<ArrowUpRight size={13} /></button></div></footer>
+    <footer><span><span className="footer-mark">t.</span> Typing workspace</span><div><span><span className="tiny-dot" />{storageSaving ? 'Saving…' : storageAvailable ? 'Saved locally' : 'Session only'}</span><button onClick={() => openModal('help')}>Keyboard shortcuts<ArrowUpRight size={13} /></button></div></footer>
 
     {notice && <div className="toast" role="status">{notice}<button aria-label="Dismiss notification" onClick={() => setNotice('')}><X size={15} /></button></div>}
-    {pauseOpen && !modal && !externalSuspended && !restartRequest && view === 'type' && <PauseDialog onResume={resumeWorkspace} onFinish={() => navigate('start')} onRestart={() => requestRestart()} interrupted={session.interrupted} storageAvailable={storageAvailable} />}
+    {pauseOpen && !modal && !externalSuspended && !restartRequest && view === 'type' && <PauseDialog onResume={resumeWorkspace} onFinish={() => navigate('start')} onRestart={() => requestRestart()} interrupted={session.interrupted} storageAvailable={storageAvailable} storageSaving={storageSaving} />}
     {restartRequest && !externalSuspended && <ConfirmRestart description={restartRequest.startFresh ? "Start a fresh 30-second test? This replaces your unfinished test with these settings. Completed results stay saved." : undefined} onCancel={() => { setRestartRequest(null); if (!restartRequest.startFresh) resumeWorkspace(); }} onConfirm={() => { const options = restartRequest; setRestartRequest(null); if (options.startFresh) startFreshWorkspace(options.config); else reset(options); }} />}
     {modal === 'settings' && <Modal title="Practice settings" onClose={() => setModal(null)}>
       <p className="modal-description">Make the text comfortable and choose a manageable goal.</p>
