@@ -3,7 +3,7 @@
 .home-page .start-intro .start-device { font-size: 14px; }
 .home-page .start-label { font-size: 12px; line-height: 1.6; }
 .home-page .start-lesson h2 { font-size: clamp(24px, 3vw, 32px); margin: 14px 0 8px; }
-.home-page .start-lesson > p, .home-page .start-option > p { font-size: 16px; line-height: 1.65; }
+.home-page .start-lesson > p { font-size: 16px; line-height: 1.65; }
 .home-page .start-lesson > .home-position { margin-bottom: 14px; font-size: 14px; color: var(--accent); }
 .home-page .primary-button, .home-page .secondary-button, .practice-library .primary-button, .practice-library .secondary-button { min-height: 44px; padding: 11px 16px; font-size: 14px; }
 .home-page .start-detail, .home-page .start-notes > p, .home-page .start-notes .text-button { font-size: 14px; }
@@ -40,7 +40,6 @@
 .home-week-summary strong { color: var(--text); }
 .home-evidence { margin-top: 20px; }
 .home-evidence .home-panel-heading { margin-bottom: 12px; }
-.home-options .start-option h2 { font-size: 21px; }
 .practice-library h1:focus { outline: none; }
 .practice-filters { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 16px; border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 20px; }
 .practice-filters label, .practice-editor form > label { display: flex; flex-direction: column; gap: 9px; color: var(--muted); font-size: 14px; min-width: 0; }
@@ -115,7 +114,7 @@
 .diagnostic-explanation ul { padding-left: 20px; }
 @media (max-width: 900px) { .diagnostic-coached { grid-template-columns: 1fr; } .diagnostic-coached .typing-coach { max-width: 280px; } }
 @media (max-width: 1000px) { .home-plan-grid { grid-template-columns: 1fr; } .practice-filters { grid-template-columns: 1fr 1fr; } .practice-filters label:first-child { grid-column: 1 / -1; } }
-@media (max-width: 650px) { .home-panel, .practice-passage-card, .practice-filters { padding: 19px; } .practice-passage-grid, .practice-filters, .home-options { grid-template-columns: 1fr; } .practice-filters label:first-child { grid-column: auto; } .home-plan-list li { align-items: flex-start; flex-direction: column; gap: 3px; } .home-inline-field { align-items: stretch; flex-direction: column; } .home-page .start-lesson, .home-page .start-option { padding: 22px; } }
+@media (max-width: 650px) { .home-panel, .practice-passage-card, .practice-filters { padding: 19px; } .practice-passage-grid, .practice-filters { grid-template-columns: 1fr; } .practice-filters label:first-child { grid-column: auto; } .home-plan-list li { align-items: flex-start; flex-direction: column; gap: 3px; } .home-inline-field { align-items: stretch; flex-direction: column; } .home-page .start-lesson { padding: 22px; } }
 .home-choice-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin: 22px 0 12px; }
 .home-choice { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 24px; border: 1px solid var(--border); border-radius: 16px; background: var(--surface); }
 .home-choice-primary { border-color: var(--accent); background: linear-gradient(150deg, var(--accent-light), var(--surface)); }

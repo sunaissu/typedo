@@ -11,10 +11,7 @@
 .milestone-empty { display: block; border: 1px solid var(--border); width: 18px; height: 18px; border-radius: 50%; }
 .backup-reminder { margin-bottom: 20px; }
 .app-shell p { line-height: 1.7; }
-.app-shell .intro p, .app-shell .start-detail, .app-shell .panel-note,
-.app-shell .lesson-round-instruction, .app-shell .lesson-result-description,
-.app-shell .practice-note, .app-shell .typing-bottomline, .app-shell .lesson-typing-bottom,
-.app-shell .story-typing-bottom, .app-shell .lesson-help, .app-shell .storage-note { font-size: 14px; }
+.app-shell .intro p, .app-shell .start-detail, .app-shell .panel-note, .app-shell .lesson-round-instruction, .app-shell .practice-note, .app-shell .typing-bottomline, .app-shell .lesson-typing-bottom, .app-shell .story-typing-bottom, .app-shell .lesson-help, .app-shell .storage-note { font-size: 14px; }
 .app-shell .side-nav button, .app-shell .sidebar-bottom button { font-size: 14px; min-height: 44px; }
 .app-shell .sidebar-local { font: 12px/1.5 var(--sans, sans-serif); }
 .app-shell .sidebar-label, .app-shell .eyebrow { font-size: 11px; }
@@ -43,7 +40,6 @@
 .app-shell .lesson-preferences select, .app-shell .setup-field select { font-size: 14px; min-height: 44px; }
 .app-shell .setup-field > span, .app-shell .setup-options legend, .app-shell .setup-options label { font-size: 14px; }
 .app-shell .setup-heading { font-size: 11px; }
-.app-shell .lesson-round-progress { font-size: 14px; }
 .app-shell .lesson-typing-bottom { flex-wrap: wrap; gap: 12px; }
 .app-shell .lesson-typing-bottom .session-actions { margin: 0; }
 .app-shell .under-test { font-size: 13px; gap: 12px; flex-wrap: wrap; }
