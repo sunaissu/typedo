@@ -1,0 +1,64 @@
+{
+  "name": "Typedo",
+  "title": "Typedo typing practice: tests, lessons and local progress",
+  "description": "Practice typing speed and accuracy with tests, guided lessons and stories.",
+  "category": "EducationalApplication",
+  "output": "dist",
+  "originEnv": "SITE_ORIGIN",
+  "mainMetadata": false,
+  "sections": [
+    {
+      "heading": "How do I use Typedo?",
+      "paragraphs": [
+        "Start with Test my speed, Learn to type, or Practise with a story. Returning visits offer a continuation or recommended activity. The library has 15 three-chapter stories, available without an account."
+      ]
+    },
+    {
+      "heading": "Where is my progress stored?",
+      "paragraphs": [
+        "Profiles, settings and progress are stored in IndexedDB in your browser. They do not automatically sync between devices. Export a backup before changing browser, device or domain."
+      ]
+    },
+    {
+      "heading": "Can I practice offline?",
+      "paragraphs": [
+        "The app provides an optional offline setup for its bundled practice content. Complete that setup while online before relying on offline access."
+      ]
+    },
+    {
+      "heading": "Can I bring my own text?",
+      "paragraphs": [
+        "Use custom passages for material you want to practice. Keep a backup of work you want to retain."
+      ]
+    }
+  ],
+  "links": [
+    { "label": "Report a problem or suggest a feature (public GitHub issue)", "url": "https://github.com/sunaissu/typedo/issues" }
+  ],
+  "pages": [
+    {
+      "path": "/privacy.html",
+      "title": "Privacy and local data | Typedo",
+      "description": "How Typedo stores your progress, handles backups, and loads the app.",
+      "sections": [
+        { "heading": "Your progress stays in this browser", "paragraphs": ["Typedo stores profiles, settings, practice passages, unfinished attempts, and learning progress in this site's IndexedDB database. It does not send your typed passages or progress to Sunaissu. There are no accounts, analytics, advertising scripts, or automatic cloud backups in this release."] },
+        { "heading": "Loading the website", "paragraphs": ["The website host receives the network information needed to deliver the app, such as your IP address and requested file URLs, and may keep operational or security logs. Fonts and other app files are served from this website. Optional offline setup stores public app files in your browser's Cache Storage."] },
+        { "heading": "Backups and shared results", "paragraphs": ["A downloaded JSON backup can contain your profile name, saved custom passages, unfinished text, settings, and results. Keep it private. Each backup covers one profile. Result-card images omit profile names and passage text; you choose whether and where to share them. Challenge settings are carried in link fragments."] },
+        { "heading": "Moving or deleting data", "paragraphs": ["Export each profile before changing browser, device, or domain. Localhost, an old domain, and typedo.sunaissu.com have separate storage. Restore the backups on the new site. Reset progress clears the active profile's learning records but keeps its settings and saved passages. Deleting a named profile or clearing this site's browser data removes the corresponding local data."] },
+        { "heading": "Getting help", "paragraphs": ["The Help & feedback page links to GitHub issues. GitHub is an external service with its own policies. Issues are public, so do not attach personal backups, private passages, passwords, or other sensitive information."] }
+      ]
+    },
+    {
+      "path": "/support.html",
+      "title": "Help and feedback | Typedo",
+      "description": "Get help with Typedo, report a problem, or suggest an improvement.",
+      "sections": [
+        { "heading": "Report a problem or suggest a feature", "paragraphs": ["Use the GitHub issue link below. Posting requires a GitHub account, and your report will be public. Describe what you were doing, what you expected, and what happened. Include your browser and operating system when relevant. Screenshots are useful after removing personal information."] },
+        { "heading": "Protect your progress first", "paragraphs": ["Before troubleshooting, open Progress and export a backup. Back up each profile separately. Do not clear browser storage as a first step. A JSON backup can include custom passages and profile details; do not attach it to a public issue."] },
+        { "heading": "Moving to typedo.sunaissu.com", "paragraphs": ["Visit the address where you previously practised, export each profile, then open the new site and restore the matching backup in each profile. The new site cannot read progress from localhost or another domain."] },
+        { "heading": "Keyboard and offline help", "paragraphs": ["Typing practice requires a physical keyboard and printable English keyboard characters. Touch navigation works on smaller screens. To practise offline, complete the app's offline download while connected, then keep using the same browser and site address."] },
+        { "heading": "Who makes Typedo?", "paragraphs": ["Typedo is made by Sunaissu. This release uses GitHub issues for support and feedback."] }
+      ]
+    }
+  ]
+}

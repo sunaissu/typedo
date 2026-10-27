@@ -25,6 +25,7 @@ import { STORAGE_KEY, discardedDraftsNotice, mergeProgress, readProgress, valida
 import { browserStorage } from './browserStorage.js';
 import { createProgressWriter, SAVE_CONFLICT_MESSAGE } from './progressWriter.js';
 import { readProgressBackup, serializeProgressBackup } from './progressBackup.js';
+import './maker.css';
 
 export default function App(props) {
   return <LoadProfile key={props.storageKey || STORAGE_KEY} {...props} />;
@@ -573,7 +574,7 @@ function Workspace({ storageKey, storage, initial, onReload, profileName, onMana
       </>}
     </main>
     <input ref={uploadRef} hidden type="file" accept=".json,application/json" onChange={importProgress} aria-label="Restore a Typedo backup" />
-    <footer><span><span className="footer-mark">t.</span> Typing workspace</span><div><span><span className="tiny-dot" />{storageSaving ? 'Saving…' : storageAvailable ? 'Saved locally' : 'Session only'}</span><button onClick={() => openModal('help')}>Keyboard shortcuts<ArrowUpRight size={13} /></button></div></footer>
+    <footer><span className="maker-credit">Made by <span className="maker-wordmark">sunaissu</span></span><div><a href="./guide.html" target="_blank" rel="noopener noreferrer">Practice guide<span className="sr-only"> (opens a new tab)</span></a><a href="./privacy.html" target="_blank" rel="noopener noreferrer">Privacy<span className="sr-only"> (opens a new tab)</span></a><a href="./support.html" target="_blank" rel="noopener noreferrer">Help &amp; feedback<span className="sr-only"> (opens a new tab)</span></a><span><span className="tiny-dot" />{storageSaving ? 'Saving…' : storageAvailable ? 'Saved locally' : 'Session only'}</span><button onClick={() => openModal('help')}>Keyboard shortcuts<ArrowUpRight size={13} /></button></div></footer>
 
     {notice && <div className="toast" role="status">{notice}<button aria-label="Dismiss notification" onClick={() => setNotice('')}><X size={15} /></button></div>}
     {pauseOpen && !modal && !externalSuspended && !restartRequest && view === 'type' && <PauseDialog onResume={resumeWorkspace} onFinish={() => navigate('start')} onRestart={() => requestRestart()} interrupted={session.interrupted} storageAvailable={storageAvailable} storageSaving={storageSaving} />}
