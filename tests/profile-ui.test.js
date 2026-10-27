@@ -10,6 +10,7 @@ let dom, server, React, createRoot, ProfilesApp, root;
 let storage;
 beforeEach(() => { storage = testStorage(dom.window.localStorage); });
 async function readSaved(key) {
+  await settleStorage(React);
   let raw;
   await React.act(async () => { raw = await storage.getItem(key); });
   return raw;
@@ -134,7 +135,7 @@ test('a failed final checkpoint keeps the active profile and its unfinished work
   await openFirstStory();
   await type(document.querySelector('.story-type-surface textarea'), 'On');
   await click(manage());
-  context.mock.method(storage, 'setItem', async () => { throw new Error('Quota exceeded'); });
+  context.mock.method(storage, 'compareAndSet', async () => { throw new Error('Quota exceeded'); });
   await value(document.querySelector('#new-profile'), 'Alex');
   await submit(document.querySelector('.profile-create'));
   assert.match(document.querySelector('.form-error').textContent, /could not be saved/);

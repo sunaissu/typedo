@@ -11,3 +11,5 @@
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
 .storage-loading{min-height:100vh;display:grid;place-items:center;padding:32px;color:var(--muted)}
+
+.storage-warning{font-size:14px;align-items:flex-start;flex-wrap:wrap;gap:12px}.storage-warning p{flex:1 1 260px;line-height:1.6}.storage-warning-actions{display:flex;flex-wrap:wrap;align-items:center;gap:14px}.storage-warning-actions button{min-height:44px}.storage-warning-actions .text-button{font-size:14px}

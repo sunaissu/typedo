@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import { createServer } from 'vite';
 import { emptyProgress, STORAGE_KEY } from '../src/storage.js';
+import { MAX_BACKUP_BYTES } from '../src/progressBackup.js';
 import { LESSON_COURSE } from '../src/lessons.js';
 import { LESSON_TARGET_KEYS } from '../src/lessonPractice.js';
 import { applyLessonLearningResult } from '../src/lessonLearning.js';
@@ -21,6 +22,7 @@ let root;
 let storage;
 beforeEach(() => { storage = testStorage(dom.window.localStorage); });
 async function readSaved(key) {
+  await settleStorage(React);
   let raw;
   await React.act(async () => { raw = await storage.getItem(key); });
   return raw;
@@ -182,7 +184,7 @@ test('startup waits for legacy migration before mounting practice or saving defa
   const pending = new Promise(resolve => { release = resolve; });
   const getItem = storage.getItem.bind(storage);
   context.mock.method(storage, 'getItem', async key => { await pending; return getItem(key); });
-  const writes = context.mock.method(storage, 'setItem');
+  const writes = context.mock.method(storage, 'compareAndSet');
   root = createRoot(document.querySelector('#root'));
   await React.act(async () => root.render(React.createElement(React.StrictMode, null, React.createElement(App, { storage }))));
   assert.match(document.querySelector('[role="status"]').textContent, /Loading your progress/);
@@ -195,20 +197,59 @@ test('startup waits for legacy migration before mounting practice or saving defa
   assert.equal(dom.window.localStorage.getItem(STORAGE_KEY), raw);
 });
 
-test('pending saves never claim success and an older completion cannot hide a newer save failure', async context => {
+test('pending saves never claim success while a newer checkpoint still needs saving', async context => {
   await mount();
   const saves = [];
-  context.mock.method(storage, 'setItem', () => new Promise((resolve, reject) => saves.push({ resolve, reject })));
+  context.mock.method(storage, 'compareAndSet', () => new Promise((resolve, reject) => saves.push({ resolve, reject })));
   await React.act(async () => document.querySelector('[aria-label="Use light theme"]').click());
   assert.match(document.querySelector('.sidebar-local').textContent, /Saving/);
   assert.doesNotMatch(document.querySelector('footer').textContent, /Saved locally/);
   await React.act(async () => document.querySelector('[aria-label="Use dark theme"]').click());
+  assert.equal(saves.length, 1, 'Only one storage transaction is in flight');
+  await React.act(async () => saves[0].resolve('saved'));
+  assert.match(document.querySelector('.sidebar-local').textContent, /Saving/);
   assert.equal(saves.length, 2);
   await React.act(async () => saves[1].reject(new Error('Storage full')));
   assert.match(document.querySelector('footer').textContent, /Session only/);
-  await React.act(async () => saves[0].resolve());
-  assert.match(document.querySelector('footer').textContent, /Session only/);
   assert.match(document.querySelector('.warning').textContent, /storage is unavailable/);
+});
+
+test('retry saving keeps the latest work and removes the failure message when storage recovers', async context => {
+  await mount();
+  const mock = context.mock.method(storage, 'compareAndSet', async () => { throw new Error('Temporary failure'); });
+  await click(document.querySelector('[aria-label="Use light theme"]'));
+  assert.match(document.querySelector('footer').textContent, /Session only/);
+  assert.ok(button('Retry saving'));
+  mock.mock.restore();
+  await click(button('Retry saving'));
+  assert.equal((await savedProgress()).settings.theme, 'light');
+  assert.match(document.querySelector('footer').textContent, /Saved locally/);
+  assert.equal(document.querySelector('.warning'), null);
+});
+
+test('a conflicting tab keeps its work exportable and reloads newer progress only after confirmation', async context => {
+  await mount();
+  const other = await savedProgress();
+  other.settings.goal = 10;
+  await storage.setItem(STORAGE_KEY, JSON.stringify(other));
+  await click(document.querySelector('[aria-label="Use light theme"]'));
+  assert.match(document.querySelector('.warning').textContent, /Another tab changed/);
+  assert.equal((await savedProgress()).settings.theme, 'dark');
+  let exported;
+  context.mock.method(URL, 'createObjectURL', blob => { exported = blob; return 'blob:conflicting-tab'; });
+  context.mock.method(dom.window.HTMLAnchorElement.prototype, 'click', () => {});
+  await click(button('Export this tab'));
+  assert.equal(JSON.parse(await exported.text()).settings.theme, 'light');
+  assert.equal((await savedProgress()).settings.goal, 10);
+  await click(button('Load saved progress'));
+  assert.equal(document.querySelector('dialog').getAttribute('aria-label'), 'Load saved progress?');
+  await click(button('Keep working here'));
+  assert.equal(document.documentElement.dataset.theme, 'light');
+  await click(button('Load saved progress'));
+  await click(button('Load saved version'));
+  assert.equal(document.documentElement.dataset.theme, 'dark');
+  assert.equal((await savedProgress()).settings.goal, 10);
+  assert.equal(document.querySelector('.warning'), null);
 });
 
 test('new visitors get a clear starting choice before any typing input takes focus', async () => {
@@ -290,7 +331,7 @@ test('returning practice starts at Home and Start respects unavailable storage',
   const progress = emptyProgress();
   progress.lessonProgress = { [LESSON_COURSE[0].id]: { practiceRounds: 1, attempts: 1 } };
   await storage.setItem(STORAGE_KEY, JSON.stringify(progress));
-  context.mock.method(storage, 'setItem', async () => { throw new Error('Storage denied'); });
+  context.mock.method(storage, 'compareAndSet', async () => { throw new Error('Storage denied'); });
   await mount();
   assert.ok(document.querySelector('.home-page'));
   assert.equal(document.querySelector('[aria-label="Typing input"]'), null);
@@ -1259,9 +1300,9 @@ test('invalid and oversized backup restores preserve existing progress and expla
   await restoreBackup({ version: 99, history: [] });
   assert.deepEqual((await savedProgress()), original);
   assert.match(document.querySelector('.toast').textContent, /not a Typedo backup/);
-  await restoreBackup(emptyProgress(), 2_000_001);
+  await restoreBackup(emptyProgress(), MAX_BACKUP_BYTES + 1);
   assert.deepEqual((await savedProgress()), original);
-  assert.match(document.querySelector('.toast').textContent, /smaller than 2 MB/);
+  assert.match(document.querySelector('.toast').textContent, /64 MiB or smaller/);
 });
 
 test('a restored weak-key workspace immediately uses the restored key statistics', async () => {
@@ -1382,6 +1423,16 @@ test('export downloads a complete backup including lesson rounds, story bookmark
   assert.equal(download.href, 'blob:typedo-backup-test');
   assert.match(download.filename, /^typedo-\d{4}-\d{2}-\d{2}\.json$/);
   assert.match(document.querySelector('.toast').textContent, /Progress exported/);
+});
+
+test('a failed backup download leaves progress and its backup reminder unchanged', async context => {
+  await mountWorkspace();
+  await click(button('Progress', document.querySelector('[aria-label="Main navigation"]')));
+  const original = await savedProgress();
+  context.mock.method(URL, 'createObjectURL', () => { throw new Error('The backup download failed.'); });
+  await click(button('Export'));
+  assert.deepEqual(await savedProgress(), original);
+  assert.match(document.querySelector('.toast').textContent, /backup download failed/);
 });
 
 test('an unfinished story preserves typed errors and corrections on reload, then credits completion only once', async () => {
@@ -1549,7 +1600,7 @@ test('pagehide immediately saves the latest story time and excludes time away be
 test('when device storage fails, partial stories stay usable and exportable without claiming to be saved', async context => {
   const story = STORIES[0];
   let exported;
-  context.mock.method(storage, 'setItem', async () => { throw new Error('Storage denied'); });
+  context.mock.method(storage, 'compareAndSet', async () => { throw new Error('Storage denied'); });
   context.mock.method(URL, 'createObjectURL', blob => { exported = blob; return 'blob:unsaved-story-backup-test'; });
   context.mock.method(dom.window.HTMLAnchorElement.prototype, 'click', () => {});
   await mountWorkspace();

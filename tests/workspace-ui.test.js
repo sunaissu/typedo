@@ -9,6 +9,7 @@ let dom, server, React, createRoot, App, root;
 let storage;
 beforeEach(() => { storage = testStorage(dom.window.localStorage); });
 async function readSaved(key) {
+  await settleStorage(React);
   let raw;
   await React.act(async () => { raw = await storage.getItem(key); });
   return raw;
@@ -97,7 +98,7 @@ test('settings pause practice and restore focus to the opener without losing the
 });
 
 test('parent storage preserves a lesson when switching to an assessment requires confirmation', async () => {
-  (await seed()); await mount(); await click(document.querySelector('.home-continue button')); await frame();
+  (await seed()); await mount(); await click(button('Learn to type')); await frame();
   const input = document.querySelector('textarea');
   const text = document.querySelector('#lesson-accessible-prompt').textContent.replace('Text to type: ', '');
   await key(input, text[0]); await key(input, text[1]);
