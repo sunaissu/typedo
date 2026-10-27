@@ -2,6 +2,15 @@ import { useState } from 'react';
 import { attemptMistakes, keyEvidence, keyLabel, resultCardLines } from './resultInsights.js';
 import './resultInsights.css';
 
+function loadMark(file) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('The result logo could not be loaded. Try the download again.'));
+    image.src = `${import.meta.env.BASE_URL}brand/${file}`;
+  });
+}
+
 export function ResultInsights({ session, stats, settings, onPractice }) {
   const mistakes = attemptMistakes(session.keyStats);
   const [error, setError] = useState('');
@@ -22,6 +31,11 @@ export function ResultInsights({ session, stats, settings, onPractice }) {
         context.fillStyle = index === 1 ? '#68a7ff' : index === 7 ? '#a0b2ce' : '#eef4ff';
         context.fillText(line, 64, positions[index], 1072);
       });
+      const [maker, signature] = await Promise.all([loadMark('sunaissu-dark.svg'), loadMark('bg-dark.svg')]);
+      context.drawImage(maker, 184, 620, 136, 44);
+      context.globalAlpha = .65;
+      context.drawImage(signature, 340, 637, 40, 19);
+      context.globalAlpha = 1;
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
       if (!blob) throw new Error('The result image could not be created. Try again.');
       const url = URL.createObjectURL(blob), anchor = document.createElement('a');

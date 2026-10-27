@@ -6,16 +6,17 @@ export const OFFLINE_CACHE_PREFIX = 'typedo-offline-';
 export const OFFLINE_PUBLIC_FILES = ['favicon.svg', 'app-icon.svg', 'manifest.webmanifest'];
 
 export function offlinePublicFiles(publicDir) {
-  const fonts = [];
-  const visit = directory => {
+  const assets = [];
+  const visit = (directory, extensions) => {
     for (const entry of readdirSync(resolve(publicDir, directory), { withFileTypes: true })) {
       const file = `${directory}/${entry.name}`;
-      if (entry.isDirectory()) visit(file);
-      else if (entry.isFile() && /\.(?:woff2?|ttf|otf)$/i.test(entry.name)) fonts.push(file);
+      if (entry.isDirectory()) visit(file, extensions);
+      else if (entry.isFile() && extensions.test(entry.name)) assets.push(file);
     }
   };
-  if (existsSync(resolve(publicDir, 'fonts'))) visit('fonts');
-  return [...OFFLINE_PUBLIC_FILES, ...fonts.sort()];
+  if (existsSync(resolve(publicDir, 'fonts'))) visit('fonts', /\.(?:woff2?|ttf|otf)$/i);
+  if (existsSync(resolve(publicDir, 'brand'))) visit('brand', /\.svg$/i);
+  return [...OFFLINE_PUBLIC_FILES, ...assets.sort()];
 }
 
 export function offlineAssetList(bundle, base = '/', publicFiles = OFFLINE_PUBLIC_FILES) {

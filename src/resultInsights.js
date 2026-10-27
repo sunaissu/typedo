@@ -24,6 +24,6 @@ export function resultCardLines(stats, settings, interrupted) {
     `${stats.errors} ${stats.errors === 1 ? 'mistake' : 'mistakes'} | ${stats.raw} raw WPM`, mode,
     ['time', 'words'].includes(settings.mode) ? `Punctuation: ${settings.punctuation ? 'on' : 'off'} | Numbers: ${settings.numbers ? 'on' : 'off'}` : 'Personal practice result',
     interrupted ? 'Paused attempt - practice only' : 'Self-reported local result',
-    'Made by sunaissu',
+    'Made by',
   ];
 }

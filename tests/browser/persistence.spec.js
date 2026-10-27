@@ -89,6 +89,39 @@ test('direct Type preference survives reload without hijacking shared challenges
   await expect(page.locator('.start-page')).toBeVisible();
 });
 
+test('hiding live speed applies to free typing and lessons while keeping timers visible', async ({ page }) => {
+  await page.goto('/'); await settled(page);
+  await openTyping(page);
+  const freeMetrics = page.locator('.live-metrics > span');
+  await expect(freeMetrics.nth(0)).toBeVisible();
+  await expect(freeMetrics.nth(1)).toBeVisible();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('switch', { name: 'Show speed while typing' }).click();
+  await page.getByRole('button', { name: 'Done', exact: true }).click(); await settled(page);
+  await expect(freeMetrics.nth(0)).toBeHidden();
+  await expect(freeMetrics.nth(1)).toBeHidden();
+  await expect(freeMetrics.nth(2)).toBeVisible();
+  expect((await saved(page)).settings.showLiveStats).toBe(false);
+
+  await page.reload(); await settled(page);
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: /^Lessons/ }).click();
+  const lessonMetrics = page.locator('.lesson-live-metrics > span');
+  await expect(lessonMetrics).toHaveCount(3);
+  await expect(lessonMetrics.nth(0)).toBeHidden();
+  await expect(lessonMetrics.nth(1)).toBeHidden();
+  await expect(lessonMetrics.nth(2)).toBeVisible();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.getByRole('switch', { name: 'Show speed while typing' }).click();
+  await page.getByRole('button', { name: 'Done', exact: true }).click(); await settled(page);
+  await expect(lessonMetrics.nth(0)).toBeVisible();
+  await expect(lessonMetrics.nth(1)).toBeVisible();
+  await expect(lessonMetrics.nth(2)).toBeVisible();
+  await page.getByRole('dialog', { name: 'Practice paused' }).getByRole('button', { name: 'Resume typing', exact: true }).click();
+  await openTyping(page);
+  await expect(freeMetrics.nth(0)).toBeVisible();
+  await expect(freeMetrics.nth(1)).toBeVisible();
+});
+
 test('all fifteen stories are discoverable and a new chapter keeps its draft', async ({ page }) => {
   await page.goto('/'); await settled(page);
   await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('button', { name: /^Stories/ }).click();

@@ -38,7 +38,6 @@
 .keyboard-reference > summary { cursor:pointer; width:fit-content; color:var(--muted); font-size:11px; padding:7px 0; }
 .keyboard-reference > .guide-card { margin-top:10px; }
 .app-shell .keyboard-reference .guide-body { display:block; }
-.keyboard-reference .finger-coach { display:none; }
 .keyboard-reference .guide-note { display:none; }
 .app-shell.focus-mode .keyboard-reference { display:none; }
 .app-shell .coached-workspace .words-window { height:178px; }
