@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { STORIES, applyStoryResult, filterStories, sanitizeStoryProgress } from '../src/stories.js';
 
 test('each story is a complete three-chapter ASCII passage with capitals and punctuation', () => {
-  assert.ok(STORIES.length >= 5);
+  assert.equal(STORIES.length, 15);
   assert.equal(new Set(STORIES.map(story => story.id)).size, STORIES.length);
   const passages = new Set();
   for (const story of STORIES) {

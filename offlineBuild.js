@@ -1,13 +1,26 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 export const OFFLINE_CACHE_PREFIX = 'typedo-offline-';
 export const OFFLINE_PUBLIC_FILES = ['favicon.svg', 'app-icon.svg', 'manifest.webmanifest'];
 
-export function offlineAssetList(bundle, base = '/') {
+export function offlinePublicFiles(publicDir) {
+  const fonts = [];
+  const visit = directory => {
+    for (const entry of readdirSync(resolve(publicDir, directory), { withFileTypes: true })) {
+      const file = `${directory}/${entry.name}`;
+      if (entry.isDirectory()) visit(file);
+      else if (entry.isFile() && /\.(?:woff2?|ttf|otf)$/i.test(entry.name)) fonts.push(file);
+    }
+  };
+  if (existsSync(resolve(publicDir, 'fonts'))) visit('fonts');
+  return [...OFFLINE_PUBLIC_FILES, ...fonts.sort()];
+}
+
+export function offlineAssetList(bundle, base = '/', publicFiles = OFFLINE_PUBLIC_FILES) {
   const prefix = base.endsWith('/') ? base : `${base}/`;
-  return [...new Set(['index.html', ...Object.keys(bundle).filter(file => !file.endsWith('.map') && file !== 'sw.js'), ...OFFLINE_PUBLIC_FILES])]
+  return [...new Set(['index.html', ...Object.keys(bundle).filter(file => !file.endsWith('.map') && file !== 'sw.js'), ...publicFiles])]
     .sort().map(file => `${prefix}${file}`);
 }
 
@@ -92,12 +105,13 @@ export function offlinePlugin() {
     configResolved(value) { config = value; },
     generateBundle(_options, bundle) {
       const base = config.base.startsWith('/') ? config.base : '/';
-      const assets = offlineAssetList(bundle, base);
+      const publicFiles = offlinePublicFiles(config.publicDir);
+      const assets = offlineAssetList(bundle, base, publicFiles);
       const digest = createHash('sha256');
       for (const [name, output] of Object.entries(bundle).sort(([a], [b]) => a.localeCompare(b))) {
         digest.update(name).update(output.type === 'chunk' ? output.code : output.source);
       }
-      for (const file of OFFLINE_PUBLIC_FILES) digest.update(readFileSync(resolve(config.publicDir, file)));
+      for (const file of publicFiles) digest.update(file).update(readFileSync(resolve(config.publicDir, file)));
       this.emitFile({ type: 'asset', fileName: 'sw.js', source: createWorkerSource({ assets, version: digest.digest('hex').slice(0, 16), base }) });
     },
   };

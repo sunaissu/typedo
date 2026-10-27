@@ -1,0 +1,23 @@
+.result-insights { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); text-align: left; }
+.result-insights h3 { margin: 0 0 8px; }
+.result-insights p, .result-download small { color: var(--muted); font-size: 14px; line-height: 1.6; }
+.attempt-mistakes { display: flex; flex-wrap: wrap; gap: 12px; list-style: none; padding: 0; }
+.attempt-mistakes li { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; }
+.attempt-mistakes span { font-size: 13px; }
+.result-download { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
+.keyboard-heatmap { margin: 24px 0; }
+.heatmap-scroll { overflow-x: auto; padding: 6px 2px; }
+.heatmap-keys { min-width: 460px; }
+.heatmap-row { display: flex; justify-content: center; gap: 5px; margin: 5px 0; }
+.heatmap-key { display: grid; place-items: center; gap: 6px; width: 56px; min-width: 29px; padding: 9px 2px; border-radius: 8px; border: 1px solid var(--border); }
+.heatmap-key kbd { background: none; border: 0; font: inherit; padding: 0; }
+.heatmap-key small { font-size: 10px; }
+.heatmap-key.space { width: 220px; }
+.heatmap-key.unknown { background: #59647518; }
+.heatmap-key.steady { background: #22a98b26; border-color: #22a98b; }
+.heatmap-key.building { background: #dca82d26; border-color: #b68a20; }
+.heatmap-key.practice { background: #db657826; border-color: #db6578; }
+.heatmap-legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; line-height: 1.7; }
+.reset-progress { margin-top: 24px; }
+.reset-progress button { margin-top: 10px; }
+.reset-error { color: #d94a65; }

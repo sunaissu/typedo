@@ -148,8 +148,9 @@ test('story discovery has native labeled filters and a clear empty state', async
   await render();
   const genre = [...document.querySelectorAll('.story-filters label')].find(item => item.textContent.startsWith('Genre')).querySelector('select');
   await React.act(async () => { genre.value = 'Science fiction'; genre.dispatchEvent(new dom.window.Event('change', { bubbles: true })); });
-  assert.equal(document.querySelectorAll('.story-book').length, 1);
+  assert.equal(document.querySelectorAll('.story-book').length, 2);
   assert.match(document.querySelector('.story-book h2').textContent, /garden/);
+  assert.ok([...document.querySelectorAll('.story-book h2')].some(item => item.textContent === 'Postcards from the night shift'));
   const completion = [...document.querySelectorAll('.story-filters label')].find(item => item.textContent.startsWith('Your progress')).querySelector('select');
   await React.act(async () => { completion.value = 'finished'; completion.dispatchEvent(new dom.window.Event('change', { bubbles: true })); });
   assert.equal(document.querySelectorAll('.story-book').length, 0);

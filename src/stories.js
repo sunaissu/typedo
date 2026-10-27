@@ -1,3 +1,5 @@
+import { MORE_STORIES } from './moreStories.js';
+
 export const STORIES = [
   {
     id: 'plant-manager',
@@ -178,6 +180,7 @@ export const STORIES = [
       },
     ],
   },
+  ...MORE_STORIES,
 ].map(story => ({
   ...story,
   genre: story.genre || (story.category.includes('mystery') ? 'Mystery' : 'Comedy'),

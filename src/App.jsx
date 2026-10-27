@@ -8,6 +8,8 @@ import Start from './Start.jsx';
 import PracticeLibrary from './PracticeLibrary.jsx';
 import Diagnostic from './Diagnostic.jsx';
 import Challenges from './Challenges.jsx';
+import { KeyboardHeatmap, ResultInsights } from './ResultInsights.jsx';
+import { mistakePassage, resetLearningProgress } from './resultInsights.js';
 import { readSharedChallenge } from './challenges.js';
 import PauseDialog, { Dialog as Modal, ConfirmRestart } from './SessionControls.jsx';
 import { sanitizeLessonDrafts } from './lessonDrafts.js';
@@ -19,8 +21,11 @@ import TestSetup from './TestSetup.jsx';
 import { LESSON_COURSE, applyLessonResult, lessonPracticeComplete, sanitizeLessonProgress } from './lessons.js';
 import { applyLessonLearningResult, getDueLessonReviews } from './lessonLearning.js';
 import { LESSONS, createSession, enterKey, generateText, getPracticeRecommendation, localDay, mergeKeyStats, metrics, pauseSession, resumeSession, streak, tick, weakKeys } from './typing.js';
-import { STORAGE_KEY, discardedDraftsNotice, mergeProgress, readProgress, validateProgress, writeProgress } from './storage.js';
+import { STORAGE_KEY, discardedDraftsNotice, mergeProgress, readProgress, validateProgress } from './storage.js';
 import { browserStorage } from './browserStorage.js';
+import { createProgressWriter, SAVE_CONFLICT_MESSAGE } from './progressWriter.js';
+import { readProgressBackup, serializeProgressBackup } from './progressBackup.js';
+import './maker.css';
 
 export default function App(props) {
   return <LoadProfile key={props.storageKey || STORAGE_KEY} {...props} />;
@@ -28,13 +33,14 @@ export default function App(props) {
 
 function LoadProfile({ storageKey = STORAGE_KEY, storage = browserStorage, ...props }) {
   const [initial, setInitial] = useState(null);
+  const [reloadVersion, setReloadVersion] = useState(0);
   useEffect(() => {
     let active = true;
     readProgress(storage, storageKey).then(value => { if (active) setInitial(value); });
     return () => { active = false; };
-  }, [storage, storageKey]);
+  }, [storage, storageKey, reloadVersion]);
   if (!initial) return <main className="storage-loading" role="status">Loading your progress…</main>;
-  return <Workspace {...props} storageKey={storageKey} storage={storage} initial={initial} />;
+  return <Workspace key={reloadVersion} {...props} storageKey={storageKey} storage={storage} initial={initial} onReload={() => { setInitial(null); setReloadVersion(value => value + 1); }} />;
 }
 
 function Toggle({ checked, onChange, children }) {
@@ -57,9 +63,11 @@ const modeLabel = settings => settings.mode === 'time' ? `${settings.duration}s 
 const category = workspaceKey;
 const formatSeconds = value => `${Math.floor(value / 60)}:${String(Math.floor(value % 60)).padStart(2, '0')}`;
 
-function Workspace({ storageKey, storage, initial, profileName, onManageProfiles, externalSuspended = false }) {
+function Workspace({ storageKey, storage, initial, onReload, profileName, onManageProfiles, externalSuspended = false }) {
   const [progress, setProgress] = useState(initial.progress);
   const [warning, setWarning] = useState(initial.warning);
+  const [saveIssue, setSaveIssue] = useState('');
+  const [writer] = useState(() => createProgressWriter(storage, storageKey, initial.storedRaw));
   const [saveStatus, setSaveStatus] = useState(initial.writeBlocked ? 'unavailable' : 'saving');
   const storageAvailable = saveStatus === 'saved';
   const storageSaving = saveStatus === 'saving';
@@ -75,12 +83,15 @@ function Workspace({ storageKey, storage, initial, profileName, onManageProfiles
   const hasPractice = progress.history.length > 0 || Object.keys(progress.lessonProgress || {}).length > 0 || Object.keys(progress.storyProgress || {}).length > 0 || Object.keys(progress.storyDrafts || {}).length > 0 || Object.keys(progress.lessonDrafts || {}).length > 0 || Object.keys(progress.workspaceDrafts || {}).length > 0;
   const [session, setSession] = useState(() => restoreWorkspaceSession(progress.workspaceDrafts?.[category(settings)]) || { ...createSession(generateText(settings, progress.keyStats)), runId: crypto.randomUUID() });
   const [sharedChallenge] = useState(() => readSharedChallenge(window.location.hash));
-  const [view, setView] = useState(() => sharedChallenge ? 'challenges' : 'start');
+  const [view, setView] = useState(() => sharedChallenge ? 'challenges' : settings.startView === 'type' ? 'type' : 'start');
   const [activityRequest, setActivityRequest] = useState(null);
   const [pauseOpen, setPauseOpen] = useState(false);
   const [restartRequest, setRestartRequest] = useState(null);
   const [comparison, setComparison] = useState('');
   const [modal, setModal] = useState(null);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const resettingRef = useRef(false);
   const [focused, setFocused] = useState(false);
   const [capsLock, setCapsLock] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
@@ -164,14 +175,15 @@ function Workspace({ storageKey, storage, initial, profileName, onManageProfiles
   }
 
   async function persistProgress(value) {
+    if (resettingRef.current) return false;
     if (writeBlockedRef.current) { if (mountedRef.current) setSaveStatus('unavailable'); return false; }
     const revision = ++saveRevision.current;
     if (mountedRef.current) setSaveStatus('saving');
-    const message = await writeProgress(storage, value, storageKey);
-    if (!mountedRef.current || revision !== saveRevision.current) return !message;
-    setSaveStatus(message ? 'unavailable' : 'saved');
-    if (message) setWarning(message);
-    return !message;
+    const result = await writer.save(value);
+    if (!mountedRef.current || revision !== saveRevision.current) return result.status === 'saved';
+    setSaveStatus(result.status);
+    setSaveIssue(result.message);
+    return result.status === 'saved';
   }
   useEffect(() => { persistProgress(progress); }, [progress]);
   useEffect(() => {
@@ -296,12 +308,36 @@ function Workspace({ storageKey, storage, initial, profileName, onManageProfiles
   });
 
   function exportProgress() {
-    updateProgress(current => ({ ...current, lastBackupAt: new Date().toISOString() }));
-    const blob = new Blob([JSON.stringify(progressRef.current, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a'); anchor.href = url; anchor.download = `typedo-${localDay()}.json`; anchor.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setNotice('Progress exported. Keep the file somewhere safe.');
+    try {
+      const backup = { ...progressRef.current, lastBackupAt: new Date().toISOString() };
+      const blob = new Blob([serializeProgressBackup(backup)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      try {
+        const anchor = document.createElement('a'); anchor.href = url; anchor.download = `typedo-${localDay()}.json`; anchor.click();
+      } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
+      updateProgress(backup);
+      setNotice('Progress exported. Keep the file somewhere safe.');
+    } catch (error) { setNotice(error.message || 'The backup could not be downloaded. Your progress has not been changed.'); }
+  }
+  async function resetProfileProgress() {
+    if (resettingRef.current) return;
+    if (writeBlockedRef.current || saveStatus === 'conflict') {
+      setResetError('Load the saved profile before resetting. Export this tab first to keep unsaved work.');
+      return;
+    }
+    resettingRef.current = true;
+    setResetBusy(true);
+    setResetError('');
+    // Use the same serialized CAS writer so stale tabs and pending saves cannot
+    // silently overwrite newer work or resurrect data after a successful reset.
+    ++saveRevision.current;
+    const result = await writer.save(resetLearningProgress(progressRef.current));
+    if (result.status === 'saved') { onReload(); return; }
+    resettingRef.current = false;
+    setResetBusy(false);
+    setResetError(`Progress was not reset. ${result.message}`);
+    setSaveStatus(result.status);
+    setSaveIssue(result.message);
   }
   function exportOriginalSave() {
     if (typeof recoveryRaw !== 'string') return;
@@ -318,8 +354,7 @@ function Workspace({ storageKey, storage, initial, profileName, onManageProfiles
     event.target.value = '';
     if (!file) return;
     try {
-      if (file.size > 2_000_000) throw new Error('Choose a backup smaller than 2 MB.');
-      const source = JSON.parse(await file.text());
+      const source = await readProgressBackup(file);
       const imported = validateProgress(source);
       const restored = mergeProgress(progressRef.current, imported);
       writeBlockedRef.current = false;
@@ -397,6 +432,7 @@ function Workspace({ storageKey, storage, initial, profileName, onManageProfiles
   }
 
   function continueActivity(request) {
+    if (request.practiceWeak) { practiceWeak(); return; }
     navigate(request.view);
     setActivityRequest(request);
     if (request.view === 'type') {
@@ -469,8 +505,17 @@ function Workspace({ storageKey, storage, initial, profileName, onManageProfiles
     </header>
 
     <main id="main-content" tabIndex={-1}>
-      {warning && <div role="status" className="warning">{warning}{typeof recoveryRaw === 'string' && <button className="text-button" onClick={exportOriginalSave}>Download original save</button>}<button aria-label="Dismiss storage message" onClick={() => setWarning('')}><X size={16} /></button></div>}
-      {view === 'start' ? <Start onDiagnostic={() => navigate('diagnostic')} progress={progress} onContinueActivity={continueActivity} onPracticeWeak={practiceWeak} onPracticeLibrary={() => navigate('library')} onSettingsChange={patch => changeSettings(patch, false)} reviewCount={getDueLessonReviews(progress.lessonLearning || {}, progress.lessonProgress || {}).length} hasPractice={hasPractice} lessonStarted={lessonStarted} courseComplete={completedLessons === LESSON_COURSE.length} storageAvailable={storageAvailable} storageSaving={storageSaving} onLessons={() => navigate('lessons')} onTest={startQuickTest} onStories={() => navigate('stories')} onProgress={() => navigate('progress')} onRestore={() => uploadRef.current.click()} /> : view === 'type' ? <>
+      {(warning || saveIssue || saveStatus === 'conflict') && <div role="status" className="warning storage-warning">
+        <p>{saveStatus === 'conflict' ? SAVE_CONFLICT_MESSAGE : saveIssue || warning}</p>
+        <div className="storage-warning-actions">
+          {typeof recoveryRaw === 'string' && <button className="text-button" onClick={exportOriginalSave}>Download original save</button>}
+          {saveStatus === 'unavailable' && !writeBlockedRef.current && <button className="text-button" onClick={() => persistProgress(progressRef.current)}>Retry saving</button>}
+          {(saveIssue || saveStatus === 'conflict') && <button className="text-button" onClick={exportProgress}>Export this tab</button>}
+          {(saveStatus === 'conflict' || writeBlockedRef.current) && <button className="text-button" onClick={() => openModal('storage-reload')}>Load saved progress</button>}
+          {saveStatus !== 'conflict' && <button aria-label="Dismiss storage message" onClick={() => { setWarning(''); setSaveIssue(''); }}><X size={16} /></button>}
+        </div>
+      </div>}
+      {view === 'start' ? <Start onIntroStory={() => continueActivity({ view: 'stories', id: STORIES[0].id })} onDiagnostic={() => navigate('diagnostic')} progress={progress} onContinueActivity={continueActivity} onPracticeWeak={practiceWeak} onPracticeLibrary={() => navigate('library')} onSettingsChange={patch => changeSettings(patch, false)} reviewCount={getDueLessonReviews(progress.lessonLearning || {}, progress.lessonProgress || {}).length} hasPractice={hasPractice} lessonStarted={lessonStarted} courseComplete={completedLessons === LESSON_COURSE.length} storageAvailable={storageAvailable} storageSaving={storageSaving} onLessons={() => navigate('lessons')} onTest={startQuickTest} onStories={() => navigate('stories')} onProgress={() => navigate('progress')} onRestore={() => uploadRef.current.click()} /> : view === 'type' ? <>
         <section className="intro"><div><div className="eyebrow"><span />TYPING WORKSPACE</div><h1>{settings.mode === 'practice' ? 'Word practice' : settings.mode === 'custom' ? 'Custom text' : 'Typing test'}</h1><p>Build confidence with real words. Keep the finger guide as long as you need it.</p></div><div className="daily-goal"><div className="goal-ring" style={{ '--fill': `${Math.min(1, todayRuns.reduce((sum, run) => sum + run.elapsed, 0) / (settings.dailyMinutes * 60000)) * 360}deg` }}><Leaf size={19} /></div><div><strong>Daily practice</strong><span>{Math.floor(todayRuns.reduce((sum, run) => sum + run.elapsed, 0) / 60000)} of {settings.dailyMinutes} minutes today</span></div></div></section>
 
         <div className="workspace-controls"><div className="mode-tabs" aria-label="Typing mode">
@@ -488,7 +533,7 @@ function Workspace({ storageKey, storage, initial, profileName, onManageProfiles
         <section className={`typing-card ${focused ? 'is-focused' : ''} ${finished ? 'finished' : ''}`} aria-label="Typing workspace">
           <div className="typing-topline"><span className="language"><span className={`status-dot ${running ? 'running' : ''}`} />{settings.mode === 'practice' ? LESSONS.find(l => l.id === settings.lesson)?.subtitle : 'english'}<span className="subtle-slash">/</span>{finished ? 'session complete' : session.status === 'paused' ? 'paused' : settings.mode === 'practice' && settings.strict ? 'accuracy first' : modeLabel(settings)}</span><div className="live-metrics"><span><strong>{running || finished ? currentMetrics.wpm : '—'}</strong> wpm</span><span><strong>{running || finished ? currentMetrics.accuracy : '—'}</strong> %</span><span className="timer"><Clock3 size={14} /><strong>{settings.mode === 'time' ? remaining : formatSeconds(session.elapsed / 1000)}</strong>{settings.mode === 'time' && <small>s</small>}</span></div></div>
 
-          {finished ? <div className="results" role="status">{session.interrupted && <p className="interrupted-note">Paused test: practice result. Start a fresh test to set a personal best.</p>}<div className="result-title"><span className="eyebrow">{isBest ? 'NEW PERSONAL BEST' : 'SESSION RESULT'}</span><h2>{isBest ? 'Personal best' : settings.mode === 'practice' ? 'Practice complete' : 'Test complete'}</h2></div><div className="result-content"><div className="result-score"><strong>{currentMetrics.wpm}</strong><span>words per minute</span></div><div className="result-secondary"><div><strong>{currentMetrics.accuracy}%</strong><span>accuracy</span></div><div><strong>{currentMetrics.raw}</strong><span>raw wpm</span></div><div><strong>{currentMetrics.errors}</strong><span>mistakes</span></div></div><div className="result-chart"><Chart data={session.samples.map(sample => sample.wpm)} /><div><span>your pace</span><span>{(session.elapsed / 1000).toFixed(1)} seconds</span></div></div></div><div className="result-actions"><button className="primary-button" ref={restartRef} onClick={() => requestRestart()}>Go again<ArrowRight size={16} /></button><button className="secondary-button" onClick={() => requestRestart({ repeat: true })}><RotateCcw size={14} />Repeat text</button>{currentMetrics.errors > 0 && <button className="text-button" onClick={practiceWeak}>Practice weak keys<ArrowUpRight size={15} /></button>}</div></div>
+          {finished ? <div className="results" role="status">{session.interrupted && <p className="interrupted-note">Paused test: practice result. Start a fresh test to set a personal best.</p>}<div className="result-title"><span className="eyebrow">{isBest ? 'NEW PERSONAL BEST' : 'SESSION RESULT'}</span><h2>{isBest ? 'Personal best' : ['practice', 'custom'].includes(settings.mode) ? 'Practice complete' : 'Test complete'}</h2></div><div className="result-content"><div className="result-score"><strong>{currentMetrics.wpm}</strong><span>words per minute</span></div><div className="result-secondary"><div><strong>{currentMetrics.accuracy}%</strong><span>accuracy</span></div><div><strong>{currentMetrics.raw}</strong><span>raw wpm</span></div><div><strong>{currentMetrics.errors}</strong><span>mistakes</span></div></div><div className="result-chart"><Chart data={session.samples.map(sample => sample.wpm)} /><div><span>your pace</span><span>{(session.elapsed / 1000).toFixed(1)} seconds</span></div></div></div><div className="result-actions"><button className="primary-button" ref={restartRef} onClick={() => requestRestart()}>Go again<ArrowRight size={16} /></button><button className="secondary-button" onClick={() => requestRestart({ repeat: true })}><RotateCcw size={14} />Repeat text</button>{currentMetrics.errors > 0 && <button className="text-button" onClick={practiceWeak}>Practice weak keys<ArrowUpRight size={15} /></button>}</div><ResultInsights session={session} stats={currentMetrics} settings={settings} onPractice={() => useCustomText(mistakePassage(session.keyStats))} /></div>
           : <div className={settings.guide ? 'coached-workspace' : ''}><div className={`typing-surface ${!focused && running ? 'unfocused' : ''}`} onClick={() => inputRef.current?.focus({ preventScroll: true })}>
             <div className="words-window" ref={wordsRef} aria-hidden="true"><div className="words-text">{session.text.split(' ').map((word, wordIndex, words) => {
               const start = charOffset;
@@ -522,20 +567,33 @@ function Workspace({ storageKey, storage, initial, profileName, onManageProfiles
         <section className="intro progress-intro"><div><button className="text-button back-link" onClick={() => navigate('type')}><ArrowLeft size={15} />Back to typing</button><h1 tabIndex={-1}>Your progress</h1><p>Review completed sessions and the keys you miss most.</p></div><div className="backup-buttons"><button className="secondary-button" onClick={exportProgress}><ArrowDownToLine size={15} />Export</button><button className="secondary-button" onClick={() => uploadRef.current.click()}><Upload size={15} />Restore</button></div></section>
         <div className="progress-stats">{[{ icon: Award, value: best === null ? '—' : best, unit: 'wpm', title: 'Best test speed' }, { icon: Target, value: averageAccuracy === null ? '—' : averageAccuracy, unit: '%', title: 'Average accuracy' }, { icon: KeyboardIcon, value: progress.history.length, unit: '', title: 'Sessions completed' }, { icon: Flame, value: currentStreak, unit: 'days', title: 'Current streak' }].map(({ icon: Icon, value, unit, title }) => <div key={title}><Icon size={19} /><strong>{value}<small>{unit}</small></strong><span>{title}</span></div>)}</div>
         <div className="progress-columns"><section className="panel"><div className="section-heading"><h2>Your typing pace</h2><span>{comparableTests.length} comparable tests</span></div>{testHistory.length ? <><label className="comparison-control">Compare the same test<select value={comparisonCategory} onChange={event => setComparison(event.target.value)}>{[...new Map(testHistory.map(run => [run.category, run])).values()].map(run => <option key={run.category} value={run.category}>{run.label} · {run.category.split(':')[2] === 'true' ? 'with punctuation' : 'no punctuation'} · {run.category.split(':')[3] === 'true' ? 'with numbers' : 'no numbers'}</option>)}</select></label><Chart data={comparableTests.slice(0, 20).reverse().map(run => run.wpm)} height={160} /><div className="chart-labels"><span>older</span><span>latest</span></div><p className="panel-note">Same format and settings. Paused attempts are excluded. Typical speed: {medianSpeed} wpm.</p></> : <div className="empty-chart"><Activity size={28} /><h3>No test results yet</h3><p>Finish a typing test to see your pace here.</p><button className="text-button" onClick={() => { navigate('type'); changeSettings({ mode: 'time' }); }}>Take a test<ArrowRight size={15} /></button></div>}</section><section className="panel weak-panel"><div className="section-heading"><h2>Keys to practice</h2><Sparkles size={17} /></div>{weaknesses.length ? <><p>These keys could use some attention.</p><div className="weak-keys">{weaknesses.map(item => <div key={item.key}><kbd>{item.key}</kbd><span>{Math.round((1 - item.errors / item.attempts) * 100)}%</span></div>)}</div><button className="primary-button" onClick={practiceWeak}>Practice these keys<ArrowRight size={15} /></button></> : <><div className="weak-empty"><Hand size={34} /><p>Finish a session and we’ll find the keys worth practicing.</p></div><button className="secondary-button" onClick={practiceWeak}>Try finger practice<ArrowRight size={15} /></button></>}</section></div>
+        <KeyboardHeatmap stats={progress.keyStats} />
         <section className="panel history-panel"><div className="section-heading"><h2>Session history</h2><span>{progress.history.length} / 500 saved</span></div>{progress.history.length ? <div className="history-scroll"><table><thead><tr><th>Session</th><th>Speed</th><th>Accuracy</th><th>Mistakes</th><th>When</th></tr></thead><tbody>{progress.history.slice(0, 50).map(run => <tr key={run.id}><td><span className={`mode-dot ${run.mode}`} />{run.label}{run.interrupted && <span className="history-interrupted">Paused practice</span>}</td><td><strong>{run.wpm}</strong><span className="table-unit"> wpm</span></td><td>{run.accuracy}%</td><td>{run.errors}</td><td>{new Date(run.date).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td></tr>)}</tbody></table>{progress.history.length > 50 && <p className="panel-note">Showing the latest 50 sessions. Your export includes all saved sessions.</p>}</div> : <div className="empty-history"><KeyboardIcon size={26} /><p>No sessions yet. Start with thirty seconds.</p></div>}</section>
+        <section className="panel reset-progress"><h2>Reset progress</h2><p>Start this profile again. Your settings, saved practice passages, and other profiles stay intact.</p><button className="secondary-button" onClick={() => { setResetError(''); openModal('reset-progress'); }}>Reset progress...</button></section>
         <div className="storage-note"><ShieldCheck size={17} /><p>Your progress stays in this browser. Export a backup before clearing browser data or switching devices. Restoring merges results and keeps the larger per-key totals.</p></div>
       </>}
     </main>
     <input ref={uploadRef} hidden type="file" accept=".json,application/json" onChange={importProgress} aria-label="Restore a Typedo backup" />
-    <footer><span><span className="footer-mark">t.</span> Typing workspace</span><div><span><span className="tiny-dot" />{storageSaving ? 'Saving…' : storageAvailable ? 'Saved locally' : 'Session only'}</span><button onClick={() => openModal('help')}>Keyboard shortcuts<ArrowUpRight size={13} /></button></div></footer>
+    <footer><span className="maker-credit">Made by <span className="maker-wordmark">sunaissu</span></span><div><a href="./guide.html" target="_blank" rel="noopener noreferrer">Practice guide<span className="sr-only"> (opens a new tab)</span></a><a href="./privacy.html" target="_blank" rel="noopener noreferrer">Privacy<span className="sr-only"> (opens a new tab)</span></a><a href="./support.html" target="_blank" rel="noopener noreferrer">Help &amp; feedback<span className="sr-only"> (opens a new tab)</span></a><span><span className="tiny-dot" />{storageSaving ? 'Saving…' : storageAvailable ? 'Saved locally' : 'Session only'}</span><button onClick={() => openModal('help')}>Keyboard shortcuts<ArrowUpRight size={13} /></button></div></footer>
 
     {notice && <div className="toast" role="status">{notice}<button aria-label="Dismiss notification" onClick={() => setNotice('')}><X size={15} /></button></div>}
     {pauseOpen && !modal && !externalSuspended && !restartRequest && view === 'type' && <PauseDialog onResume={resumeWorkspace} onFinish={() => navigate('start')} onRestart={() => requestRestart()} interrupted={session.interrupted} storageAvailable={storageAvailable} storageSaving={storageSaving} />}
     {restartRequest && !externalSuspended && <ConfirmRestart description={restartRequest.startFresh ? "Start a fresh 30-second test? This replaces your unfinished test with these settings. Completed results stay saved." : undefined} onCancel={() => { setRestartRequest(null); if (!restartRequest.startFresh) resumeWorkspace(); }} onConfirm={() => { const options = restartRequest; setRestartRequest(null); if (options.startFresh) startFreshWorkspace(options.config); else reset(options); }} />}
+    {modal === 'storage-reload' && <Modal title="Load saved progress?" onClose={() => setModal(null)}>
+      <p>This replaces the work open in this tab with the saved version. Export this tab first to keep any work that could not be saved. You can restore that export afterward to merge completed results.</p>
+      <div className="pause-actions"><button data-autofocus className="primary-button" onClick={exportProgress}>Export this tab</button><button className="secondary-button" onClick={onReload}>Load saved version</button><button className="text-button" onClick={() => setModal(null)}>Keep working here</button></div>
+    </Modal>}
+    {modal === 'reset-progress' && <Modal title="Reset this profile's progress?" onClose={() => { if (!resetBusy) setModal(null); }}>
+      <p>Are you sure? This clears completed results, best scores, streaks, key statistics, lesson and story progress, and unfinished attempts for {profileName || 'this profile'}.</p>
+      <p>Your settings and saved practice passages stay. Other profiles are not affected. Download a backup first if you might want to restore your progress later. There is no undo without a backup.</p>
+      <div className="pause-actions"><button data-autofocus className="primary-button" disabled={resetBusy} onClick={() => setModal(null)}>Keep my progress</button><button className="secondary-button" disabled={resetBusy} onClick={exportProgress}>Download backup first</button><button className="secondary-button" disabled={resetBusy} onClick={resetProfileProgress}>{resetBusy ? 'Resetting...' : 'Yes, reset my progress'}</button></div>
+      {resetError && <p className="reset-error" role="alert">{resetError}</p>}
+    </Modal>}
     {modal === 'settings' && <Modal title="Practice settings" onClose={() => setModal(null)}>
       <p className="modal-description">Make the text comfortable and choose a manageable goal.</p>
       <Toggle checked={settings.theme === 'dark'} onChange={value => changeSettings({ theme: value ? 'dark' : 'light' }, false)}>Dark theme</Toggle>
       <Toggle checked={settings.guide} onChange={value => changeSettings({ guide: value }, false)}>Show the finger guide</Toggle>
+      <Toggle checked={settings.startView === 'type'} onChange={value => changeSettings({ startView: value ? 'type' : 'start' }, false)}>Open directly to Type next time</Toggle>
       <Toggle checked={settings.sound} onChange={value => changeSettings({ sound: value }, false)}>Key sounds</Toggle>
       <Toggle checked={settings.showLiveStats} onChange={value => changeSettings({ showLiveStats: value }, false)}>Show speed while typing</Toggle>
       <Toggle checked={settings.strict} onChange={value => changeSettings({ strict: value })}>Correct each key before continuing in practice</Toggle>

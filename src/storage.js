@@ -8,7 +8,7 @@ import { sanitizeSavedPassages } from './practiceLibrary.js';
 import { browserStorage } from './browserStorage.js';
 
 export const STORAGE_KEY = 'typedo:v1';
-export const DEFAULT_SETTINGS = { mode: 'time', duration: 30, wordCount: 25, lesson: 'home', lessonTheme: 'everyday', lessonLength: 'standard', punctuation: false, numbers: false, strict: true, guide: true, sound: false, theme: 'dark', themeRevision: 2, goal: 5, dailyMinutes: 5, weeklyDays: 3, passageSize: 28, lineHeight: 1.9, showLiveStats: true, customText: 'Keep your eyes on the screen. Place your fingers on the home row and type each word carefully.' };
+export const DEFAULT_SETTINGS = { startView: 'start', mode: 'time', duration: 30, wordCount: 25, lesson: 'home', lessonTheme: 'everyday', lessonLength: 'standard', punctuation: false, numbers: false, strict: true, guide: true, sound: false, theme: 'dark', themeRevision: 2, goal: 5, dailyMinutes: 5, weeklyDays: 3, passageSize: 28, lineHeight: 1.9, showLiveStats: true, customText: 'Keep your eyes on the screen. Place your fingers on the home row and type each word carefully.' };
 export const emptyProgress = () => ({ version: 1, settings: { ...DEFAULT_SETTINGS }, history: [], keyStats: {}, lessonProgress: {}, lessonLearning: {}, storyProgress: {}, storyDrafts: {}, lessonDrafts: {}, workspaceDrafts: {}, savedPassages: [] });
 const finite = value => typeof value === 'number' && Number.isFinite(value) && value >= 0;
 export function discardedDraftsNotice(raw, cleaned) {
@@ -19,6 +19,7 @@ export function validateProgress(value) {
   if (!value || typeof value !== 'object' || value.version !== 1 || !Array.isArray(value.history)) throw new Error('This is not a Typedo backup.');
   const settings = { ...DEFAULT_SETTINGS };
   const raw = value.settings || {};
+  if (['start', 'type'].includes(raw.startView)) settings.startView = raw.startView;
   for (const key of ['punctuation', 'numbers', 'strict', 'guide', 'sound', 'showLiveStats']) if (typeof raw[key] === 'boolean') settings[key] = raw[key];
   if (['time', 'words', 'practice', 'custom'].includes(raw.mode)) settings.mode = raw.mode;
   if ([15, 30, 60, 120].includes(raw.duration)) settings.duration = raw.duration;
@@ -113,15 +114,17 @@ export function mergeProgress(currentValue, incomingValue) {
 
 export async function readProgress(storage = browserStorage, storageKey = STORAGE_KEY) {
   let saved = null;
+  let storedRaw = null;
   try {
-    saved = await storage.getItem(storageKey) ?? (storageKey === STORAGE_KEY ? await storage.getItem('keysteady:v1') : null);
+    storedRaw = await storage.getItem(storageKey);
+    saved = storedRaw ?? (storageKey === STORAGE_KEY ? await storage.getItem('keysteady:v1') : null);
     const raw = saved !== null ? JSON.parse(saved) : null;
     const progress = saved !== null ? validateProgress(raw) : emptyProgress();
     const warning = discardedDraftsNotice(raw, progress);
-    return { progress, warning, writeBlocked: false, recoveryRaw: warning ? saved : null };
+    return { progress, storedRaw, warning, writeBlocked: false, recoveryRaw: warning ? saved : null };
   } catch {
     return {
-      progress: emptyProgress(), writeBlocked: true, recoveryRaw: typeof saved === 'string' ? saved : null,
+      progress: emptyProgress(), storedRaw, writeBlocked: true, recoveryRaw: typeof saved === 'string' ? saved : null,
       warning: 'Saved progress could not be read. Automatic saving is paused to protect the original. You can type, export this session, or restore a valid backup.',
     };
   }

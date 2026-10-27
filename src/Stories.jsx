@@ -185,7 +185,12 @@ export default function Stories({ storyProgress = emptyProgress, storyDrafts = e
   }, [session.status]);
 
   useEffect(() => {
-    if (selection?.choosing) nextRef.current?.focus({ preventScroll: true });
+    if (!selection) return;
+    const frame = requestAnimationFrame(() => {
+      if (selection.choosing) nextRef.current?.focus({ preventScroll: true });
+      else if (sessionRef.current.status !== 'paused') inputRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
   }, [selection]);
 
   useEffect(() => {
@@ -228,7 +233,6 @@ export default function Stories({ storyProgress = emptyProgress, storyDrafts = e
     setInputNote('');
     if (viewportRef.current) viewportRef.current.scrollTop = 0;
     if (route && !draft) changeDraft(story.id, createStoryDraft(story.id, chapterIndex, next), { flush: true });
-    requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
   }
 
   useEffect(() => {
@@ -325,7 +329,7 @@ export default function Stories({ storyProgress = emptyProgress, storyDrafts = e
         <button className="primary-button" ref={element => { libraryActionsRef.current[story.id] = element; }} onClick={() => startChapter(story, resumeIndex, true)}>{draft || replaying || (!done && completed) ? `Resume chapter ${resumeIndex + 1}` : done ? 'Read again' : 'Start story'}<ArrowRight size={15} /></button>
       </article>;
     })}</div>
-    <p className={`story-storage-note ${storageAvailable ? '' : 'storage-unavailable'}`}>{storageSaving ? 'Saving your place on this device…' : storageAvailable ? 'Your place saves on this device as you type, even in the middle of a chapter.' : 'Device storage is unavailable. Your place lasts for this visit only; export a backup before closing.'} All eight original stories are available now. Weekly features run through December 13, 2026; after that, recommendations come from this library.</p>
+    <p className={`story-storage-note ${storageAvailable ? '' : 'storage-unavailable'}`}>{storageSaving ? 'Saving your place on this device…' : storageAvailable ? 'Your place saves on this device as you type, even in the middle of a chapter.' : 'Device storage is unavailable. Your place lasts for this visit only; export a backup before closing.'} All {STORIES.length} stories are available now. Weekly features run through December 13, 2026; after that, recommendations come from this library.</p>
   </div>;
 
   const { story, chapterIndex, route } = selection;

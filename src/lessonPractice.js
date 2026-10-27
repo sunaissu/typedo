@@ -53,7 +53,6 @@ const ALLOWED = {
 
 export const LESSON_TARGET_KEYS = Object.fromEntries(Object.entries(ROUND_KEYS).map(([id, rounds]) => [id, [...new Set(rounds.join(''))]]));
 
-// Optional tests have their own passages. Later checks keep their reserved material.
 export const LESSON_TEST_PASSAGES = {
   'find-home': [
     'jada takes a flask of tea to a friend at a station',

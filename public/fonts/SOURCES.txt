@@ -1,0 +1,44 @@
+Self-hosted font files for Typedo.
+Downloaded from Google Fonts on 2026-10-27.
+https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=DM+Mono:wght@400;500&family=Sora:wght@600&display=swap
+
+dm-mono-400-latin-ext.woff2
+https://fonts.gstatic.com/s/dmmono/v16/aFTU7PB1QTsUX8KYthSQBLyM.woff2
+SHA-256: a52e19ebe0398c9c0f8fa28a0c5e9a6bc324f35d9f0881c9aa407d10af447175
+
+dm-mono-400-latin.woff2
+https://fonts.gstatic.com/s/dmmono/v16/aFTU7PB1QTsUX8KYthqQBA.woff2
+SHA-256: e1896b13b2b1bb112fac2f9571bd6c40e118746e77a4511edbf43fbb41bf3e1e
+
+dm-mono-500-latin-ext.woff2
+https://fonts.gstatic.com/s/dmmono/v16/aFTR7PB1QTsUX8KYvumzEY2tbZX9.woff2
+SHA-256: 8711f938c3f04f91e35ae64ebc7f2eecd800d2ae1c3542f6c837c758a50422f5
+
+dm-mono-500-latin.woff2
+https://fonts.gstatic.com/s/dmmono/v16/aFTR7PB1QTsUX8KYvumzEYOtbQ.woff2
+SHA-256: 9964608a849396bd00c4bfd7034afe03486469dcf20b4f6b8cbdfdd310369951
+
+dm-sans-latin-ext.woff2
+https://fonts.gstatic.com/s/dmsans/v17/rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu6-K6h9Q.woff2
+SHA-256: a5d38fe99f930275684999b462c7123faa063d9e44e73b4b241723d884aa0f49
+
+dm-sans-latin.woff2
+https://fonts.gstatic.com/s/dmsans/v17/rP2Yp2ywxg089UriI5-g4vlH9VoD8Cmcqbu0-K4.woff2
+SHA-256: 9fea608a947e67020c33cad9a6fe3d60c54119dfb8cff87768a8117a15ed7543
+
+sora-latin-ext.woff2
+https://fonts.gstatic.com/s/sora/v17/xMQOuFFYT72X5wkB_18qmnndmSeMmU-DKQJRBg.woff2
+SHA-256: 2c17a94fef4242d1c33ffcc9bb43c7eb93ad88db53409c1067ac23cc914523e2
+
+sora-latin.woff2
+https://fonts.gstatic.com/s/sora/v17/xMQOuFFYT72X5wkB_18qmnndmSeMmU-NKQI.woff2
+SHA-256: fa9ab76f30510ad92153c6d6d72d0508884b85e9f0148abdfa963231b2a4845a
+
+dmsans-OFL.txt
+https://raw.githubusercontent.com/google/fonts/main/ofl/dmsans/OFL.txt
+
+dmmono-OFL.txt
+https://raw.githubusercontent.com/google/fonts/main/ofl/dmmono/OFL.txt
+
+sora-OFL.txt
+https://raw.githubusercontent.com/google/fonts/main/ofl/sora/OFL.txt

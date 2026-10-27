@@ -27,7 +27,7 @@
 .app-shell :focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
 .app-shell .typing-input:focus-visible { outline: none; }
 .app-shell .typing-card:focus-within, .app-shell .lesson-typing-card:focus-within, .app-shell .story-typing-card:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
-.skip-link { position: fixed; left: 20px; top: 12px; z-index: 100; transform: translateY(-200%); padding: 12px 20px; background: var(--surface); color: var(--text); border: 2px solid var(--accent); border-radius: 8px; }
+.skip-link { position: fixed; left: 20px; top: 12px; z-index: 100; transform: translateY(calc(-100% - 100px)); padding: 12px 20px; background: var(--surface); color: var(--text); border: 2px solid var(--accent); border-radius: 8px; }
 .skip-link:focus { transform: translateY(0); }
 .skip-practice { left: 230px; }
 .session-actions { display: flex; gap: 12px; align-items: center; justify-content: flex-end; flex-wrap: wrap; margin: 12px 0; }

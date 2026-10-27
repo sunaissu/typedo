@@ -1,0 +1,28 @@
+{
+  "status": "planned-store-release-not-submitted",
+  "sourcePlatform": "web",
+  "nativeFeatureParityVerified": false,
+  "googlePlay": {
+    "title": "Typedo: Typing Practice",
+    "shortDescription": "Practice typing speed and accuracy with lessons, tests and stories.",
+    "fullDescription": "Practice typing with tests, guided lessons and stories. Review your speed and accuracy, and keep progress in local profiles.\n\nThis draft describes the web app. Confirm offline behavior, native storage, keyboard support and every feature against the eventual store binary before submission."
+  },
+  "appStore": {
+    "name": "Typedo: Typing Practice",
+    "subtitle": "Typing tests and lessons",
+    "keywords": "typing,keyboard,speed,accuracy,practice,lessons,training",
+    "description": "Practice typing with tests, guided lessons and stories. Review your speed and accuracy, and keep progress in local profiles.\n\nThis draft describes the web app. Confirm offline behavior, native storage, keyboard support and every feature against the eventual store binary before submission."
+  },
+  "screenshotPlan": [
+    "Show the primary task using the actual release build.",
+    "Show a completed result with synthetic demonstration data.",
+    "Show supported storage, export or sharing controls."
+  ],
+  "releaseRequirements": [
+    "Confirm a native distribution plan and a tested signed release.",
+    "Replace draft descriptions with verified native features before submission.",
+    "Capture store-sized screenshots from that release; browser previews are not native release evidence.",
+    "Set final support/privacy URLs and complete store disclosures.",
+    "Confirm publisher details and all required launch approvals."
+  ]
+}

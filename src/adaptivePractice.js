@@ -1,4 +1,3 @@
-// Short, authored scenes keep targeted practice readable, including exact-case keys.
 const PASSAGES = [
   'Ava put a tiny hat on the office plant. After lunch, someone asked whether it was the new manager.',
   'Ask Alex to bring the cake. Apparently, the last cake arrived on a bicycle with its own helmet.',

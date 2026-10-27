@@ -117,7 +117,10 @@ export function createBrowserStorage({
         const current = records.get(key);
         current.onsuccess = () => {
           if ((current.result ?? null) !== expected) { done('conflict'); return; }
-          const save = () => { records.put(value, key); done('saved'); };
+          const save = () => {
+            if (current.result !== value) records.put(value, key);
+            done('saved');
+          };
           if (!absentKey) { save(); return; }
           const existing = records.get(absentKey);
           existing.onsuccess = () => {

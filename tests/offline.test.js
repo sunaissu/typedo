@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
-import { OFFLINE_CACHE_PREFIX, createWorkerSource, offlineAssetList } from '../offlineBuild.js';
+import { OFFLINE_CACHE_PREFIX, createWorkerSource, offlineAssetList, offlinePublicFiles } from '../offlineBuild.js';
 import { appWorker, removeOfflineDownload, workerMessage } from '../src/offline.js';
 
 function workerFixture({ version = 'test-build', failInstall = false, windows = ['https://typedo.test/'] } = {}) {
-  const assets = ['/index.html', '/assets/app-abc.js', '/assets/app-def.css', '/manifest.webmanifest', '/app-icon.svg'];
+  const assets = ['/index.html', '/assets/app-abc.js', '/assets/app-def.css', '/manifest.webmanifest', '/app-icon.svg', '/fonts/dm-sans-latin.woff2'];
   const listeners = {};
   const cacheData = new Map();
   const requests = [];
@@ -53,6 +54,22 @@ test('precache lists only local built files, excludes source maps, and respects 
   assert.ok(files.every(file => !file.includes('http') && !file.endsWith('.map')));
 });
 
+test('every self-hosted font is packaged and precached without caching host configuration or license text', async () => {
+  const publicFiles = offlinePublicFiles(fileURLToPath(new URL('../public/', import.meta.url)));
+  const css = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
+  assert.doesNotMatch(css, /https:\/\/fonts\.(?:googleapis|gstatic)\.com/);
+  const fontPaths = [...css.matchAll(/url\(\/([^)]*\.woff2)\)/g)].map(match => match[1]);
+  assert.equal(fontPaths.length, 8);
+  const assets = offlineAssetList({}, '/typing/', publicFiles);
+  for (const file of fontPaths) {
+    const data = await readFile(new URL(`../public/${file}`, import.meta.url));
+    assert.equal(data.subarray(0, 4).toString(), 'wOF2', `${file} is a real WOFF2 font`);
+    assert.ok(assets.includes(`/typing/${file}`), `${file} is available offline`);
+  }
+  assert.ok(publicFiles.every(file => !file.startsWith('fonts/') || /\.woff2$/.test(file)));
+  assert.ok(!publicFiles.some(file => /(?:_headers|_redirects|\.txt$)/.test(file)));
+});
+
 test('installation downloads public files without credentials and waits for deliberate update activation', async () => {
   const fixture = workerFixture();
   await fixture.emit('install');
@@ -84,12 +101,14 @@ test('updates refuse to replace another open tab and activate after an explicit 
   assert.equal(one.activations, 1);
 });
 
-test('offline navigation and hashed assets use cache; external fonts, backend paths and writes bypass it', async () => {
+test('offline navigation, local fonts and hashed assets use cache; external requests and writes bypass it', async () => {
   const fixture = workerFixture();
   await fixture.emit('install');
   const navigate = { url: 'https://typedo.test/?from=home', method: 'GET', mode: 'navigate', headers: new Headers() };
   const result = await fixture.emit('fetch', { request: navigate });
   assert.equal(result.response.cached, 'https://typedo.test/index.html');
+  const font = await fixture.emit('fetch', { request: new Request('https://typedo.test/fonts/dm-sans-latin.woff2') });
+  assert.equal(font.response.cached, 'https://typedo.test/fonts/dm-sans-latin.woff2');
   assert.equal(fixture.network, 0);
   const old = await fixture.cacheStorage.open(`${OFFLINE_CACHE_PREFIX}previous`);
   await old.addAll([new Request('https://typedo.test/assets/old-chunk.js')]);
