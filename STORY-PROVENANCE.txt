@@ -1,0 +1,20 @@
+Typedo story content - 2026-10-27
+
+The library contains 15 stories, each with three chapters. The original eight story records and their chapter text were retained to preserve existing bookmarks and drafts.
+
+Seven stories were newly drafted with AI assistance for this change, in src/moreStories.js:
+- The bell that rang at lunch
+- The umbrella desk
+- The last square on the map
+- Postcards from the night shift
+- The smallest parade
+- A shadow for the market
+- The recipe in the blue envelope
+
+No third-party story excerpts, lyrics, quotations from books, franchise characters, real-person portrayals, or requested author imitations were used as source material for these seven drafts. Characters, conversations and events are fictional. Ordinary names, settings and general ideas may resemble other works by coincidence. The existing eight stories were reviewed for obvious franchise references and external quotations; no independent provenance record or exhaustive similarity clearance was available for them.
+
+This is a provenance note, not a guarantee against legal claims or an assertion of exclusive copyright in AI-generated text. Human editorial review remains useful before making ownership claims. The U.S. Copyright Office distinguishes protected expression from general ideas and distinguishes human authorship from purely AI-generated material; requirements vary by jurisdiction.
+
+References:
+https://www.copyright.gov/help/faq/faq-protect.html
+https://www.copyright.gov/newsnet/2025/1060.html

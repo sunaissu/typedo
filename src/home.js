@@ -1,6 +1,7 @@
 import { LESSON_COURSE, lessonPracticeComplete } from './lessons.js';
 import { STORIES } from './stories.js';
 import { getDueLessonReviews } from './lessonLearning.js';
+import { getPracticeRecommendation } from './adaptivePractice.js';
 
 export const localDateKey = value => {
   const date = new Date(value);
@@ -42,6 +43,8 @@ export function getHomeRecommendation(progress = {}, now = new Date()) {
   if (latest) return latest;
   const due = getDueLessonReviews(progress.lessonLearning || {}, progress.lessonProgress || {}, now)[0];
   if (due) return { view: 'lessons', id: due.lessonId, review: true, title: LESSON_COURSE.find(item => item.id === due.lessonId)?.title || 'Lesson review', detail: 'A short review is ready', reason: 'Revisit a lesson you have already practised. Your completed credit stays yours.', action: 'Review lesson' };
+  const focused = getPracticeRecommendation(progress.keyStats);
+  if (focused) return { view: 'type', practiceWeak: true, title: focused.title, detail: 'A short, untimed exercise', reason: focused.description, action: 'Practise these keys' };
   const next = LESSON_COURSE.find(lesson => !lessonPracticeComplete(progress.lessonProgress?.[lesson.id]));
   if (next) return { view: 'lessons', id: next.id, title: next.title, detail: `Block ${Math.min(3, (progress.lessonProgress?.[next.id]?.practiceRounds || 0) + 1)} of 3 · No time limit`, reason: Object.keys(progress.lessonProgress || {}).length ? 'Your next step in the course. Finger hints are available whenever you need them.' : 'Start with familiar words and a guide to the right fingers.', action: Object.keys(progress.lessonProgress || {}).length ? 'Continue learning' : 'Start your first lesson' };
   return { view: 'stories', title: 'Choose your next story', detail: 'The guided course is complete', reason: 'Keep practising with a chapter, or revisit any lesson.', action: 'Explore stories' };

@@ -82,7 +82,7 @@ function Workspace({ storageKey, storage, initial, onReload, profileName, onMana
   const hasPractice = progress.history.length > 0 || Object.keys(progress.lessonProgress || {}).length > 0 || Object.keys(progress.storyProgress || {}).length > 0 || Object.keys(progress.storyDrafts || {}).length > 0 || Object.keys(progress.lessonDrafts || {}).length > 0 || Object.keys(progress.workspaceDrafts || {}).length > 0;
   const [session, setSession] = useState(() => restoreWorkspaceSession(progress.workspaceDrafts?.[category(settings)]) || { ...createSession(generateText(settings, progress.keyStats)), runId: crypto.randomUUID() });
   const [sharedChallenge] = useState(() => readSharedChallenge(window.location.hash));
-  const [view, setView] = useState(() => sharedChallenge ? 'challenges' : 'start');
+  const [view, setView] = useState(() => sharedChallenge ? 'challenges' : settings.startView === 'type' ? 'type' : 'start');
   const [activityRequest, setActivityRequest] = useState(null);
   const [pauseOpen, setPauseOpen] = useState(false);
   const [restartRequest, setRestartRequest] = useState(null);
@@ -431,6 +431,7 @@ function Workspace({ storageKey, storage, initial, onReload, profileName, onMana
   }
 
   function continueActivity(request) {
+    if (request.practiceWeak) { practiceWeak(); return; }
     navigate(request.view);
     setActivityRequest(request);
     if (request.view === 'type') {
@@ -513,7 +514,7 @@ function Workspace({ storageKey, storage, initial, onReload, profileName, onMana
           {saveStatus !== 'conflict' && <button aria-label="Dismiss storage message" onClick={() => { setWarning(''); setSaveIssue(''); }}><X size={16} /></button>}
         </div>
       </div>}
-      {view === 'start' ? <Start onDiagnostic={() => navigate('diagnostic')} progress={progress} onContinueActivity={continueActivity} onPracticeWeak={practiceWeak} onPracticeLibrary={() => navigate('library')} onSettingsChange={patch => changeSettings(patch, false)} reviewCount={getDueLessonReviews(progress.lessonLearning || {}, progress.lessonProgress || {}).length} hasPractice={hasPractice} lessonStarted={lessonStarted} courseComplete={completedLessons === LESSON_COURSE.length} storageAvailable={storageAvailable} storageSaving={storageSaving} onLessons={() => navigate('lessons')} onTest={startQuickTest} onStories={() => navigate('stories')} onProgress={() => navigate('progress')} onRestore={() => uploadRef.current.click()} /> : view === 'type' ? <>
+      {view === 'start' ? <Start onIntroStory={() => continueActivity({ view: 'stories', id: STORIES[0].id })} onDiagnostic={() => navigate('diagnostic')} progress={progress} onContinueActivity={continueActivity} onPracticeWeak={practiceWeak} onPracticeLibrary={() => navigate('library')} onSettingsChange={patch => changeSettings(patch, false)} reviewCount={getDueLessonReviews(progress.lessonLearning || {}, progress.lessonProgress || {}).length} hasPractice={hasPractice} lessonStarted={lessonStarted} courseComplete={completedLessons === LESSON_COURSE.length} storageAvailable={storageAvailable} storageSaving={storageSaving} onLessons={() => navigate('lessons')} onTest={startQuickTest} onStories={() => navigate('stories')} onProgress={() => navigate('progress')} onRestore={() => uploadRef.current.click()} /> : view === 'type' ? <>
         <section className="intro"><div><div className="eyebrow"><span />TYPING WORKSPACE</div><h1>{settings.mode === 'practice' ? 'Word practice' : settings.mode === 'custom' ? 'Custom text' : 'Typing test'}</h1><p>Build confidence with real words. Keep the finger guide as long as you need it.</p></div><div className="daily-goal"><div className="goal-ring" style={{ '--fill': `${Math.min(1, todayRuns.reduce((sum, run) => sum + run.elapsed, 0) / (settings.dailyMinutes * 60000)) * 360}deg` }}><Leaf size={19} /></div><div><strong>Daily practice</strong><span>{Math.floor(todayRuns.reduce((sum, run) => sum + run.elapsed, 0) / 60000)} of {settings.dailyMinutes} minutes today</span></div></div></section>
 
         <div className="workspace-controls"><div className="mode-tabs" aria-label="Typing mode">
@@ -591,6 +592,7 @@ function Workspace({ storageKey, storage, initial, onReload, profileName, onMana
       <p className="modal-description">Make the text comfortable and choose a manageable goal.</p>
       <Toggle checked={settings.theme === 'dark'} onChange={value => changeSettings({ theme: value ? 'dark' : 'light' }, false)}>Dark theme</Toggle>
       <Toggle checked={settings.guide} onChange={value => changeSettings({ guide: value }, false)}>Show the finger guide</Toggle>
+      <Toggle checked={settings.startView === 'type'} onChange={value => changeSettings({ startView: value ? 'type' : 'start' }, false)}>Open directly to Type next time</Toggle>
       <Toggle checked={settings.sound} onChange={value => changeSettings({ sound: value }, false)}>Key sounds</Toggle>
       <Toggle checked={settings.showLiveStats} onChange={value => changeSettings({ showLiveStats: value }, false)}>Show speed while typing</Toggle>
       <Toggle checked={settings.strict} onChange={value => changeSettings({ strict: value })}>Correct each key before continuing in practice</Toggle>

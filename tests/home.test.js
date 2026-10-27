@@ -4,6 +4,25 @@ import { getComparableSummary, getHomeDrafts, getHomeRecommendation, getPractice
 import { LESSON_COURSE } from '../src/lessons.js';
 import { STORIES } from '../src/stories.js';
 import { applyLessonLearningResult } from '../src/lessonLearning.js';
+import { emptyProgress, validateProgress } from '../src/storage.js';
+
+test('home uses evidence for focused practice without overriding unfinished work', () => {
+  const progress = { keyStats: { ';': { attempts: 20, errors: 5 } } };
+  assert.equal(getHomeRecommendation(progress).practiceWeak, true);
+  assert.match(getHomeRecommendation(progress).reason, /;/);
+  const story = STORIES[0];
+  progress.storyDrafts = { [story.id]: { chapterIndex: 0, text: 'Hello.', typed: 'H', updatedAt: '2026-10-27T10:00:00Z' } };
+  assert.equal(getHomeRecommendation(progress).view, 'stories');
+});
+
+test('start view preference defaults safely and round trips through backups', () => {
+  const progress = emptyProgress();
+  assert.equal(progress.settings.startView, 'start');
+  progress.settings.startView = 'type';
+  assert.equal(validateProgress(progress).settings.startView, 'type');
+  progress.settings.startView = 'https://example.com';
+  assert.equal(validateProgress(progress).settings.startView, 'start');
+});
 
 test('Home chooses the most recent unfinished activity across modes and preserves its route', () => {
   const lessonId = LESSON_COURSE[0].id;

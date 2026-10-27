@@ -255,12 +255,12 @@ test('a conflicting tab keeps its work exportable and reloads newer progress onl
 test('new visitors get a clear starting choice before any typing input takes focus', async () => {
   await mount();
   assert.ok(document.querySelector('.start-page'));
-  assert.match(document.querySelector('h1').textContent, /home on the keyboard/);
+  assert.match(document.querySelector('h1').textContent, /What would you like to do/);
   assert.match(document.querySelector('.start-device').textContent, /physical keyboard/);
   assert.match(document.querySelector('.start-notes').textContent, /Progress stays in this browser/);
   assert.equal(document.querySelector('[aria-label="Typing input"]'), null);
   assert.equal(document.activeElement, document.querySelector('h1'));
-  await click(button('Start your first lesson'));
+  await click(button('Learn to type'));
   assert.match(document.querySelector('.lesson-workspace-heading').textContent, new RegExp(LESSON_COURSE[0].title));
   assert.ok(document.querySelector('#lesson-accessible-prompt'));
   assert.match(document.querySelector('.lesson-round-instruction').textContent, /Find the bumps on F and J/);
@@ -271,7 +271,7 @@ test('new visitors get a clear starting choice before any typing input takes foc
 test('the quick start test resets its promised format and waits for the first key', async () => {
   (await seedSettings({ mode: 'words', wordCount: 100, duration: 120, punctuation: true, numbers: true }));
   await mount();
-  await click(button('Start a 30-second test'));
+  await click(button('Test my speed'));
   const settings = (await savedProgress()).settings;
   assert.equal(settings.mode, 'time');
   assert.equal(settings.duration, 30);
@@ -284,7 +284,7 @@ test('the quick start test resets its promised format and waits for the first ke
   assert.ok(document.querySelector('.status-dot.running'));
   await click(button('Start', document.querySelector('[aria-label="Main navigation"]')));
   assert.ok(document.querySelector('.start-page'));
-  await click(button('Stories', document.querySelector('.home-plan-list')));
+  await click(button('Practise with a story'));
   assert.ok(storyBook(STORIES[0]));
   assert.equal(document.activeElement, document.querySelector('.story-intro h1'));
   assert.match(document.querySelector('.story-intro p').textContent, /Choose a story and start typing/);
