@@ -59,7 +59,7 @@ test('every self-hosted font is packaged and precached without caching host conf
   const css = await readFile(new URL('../src/styles.css', import.meta.url), 'utf8');
   assert.doesNotMatch(css, /https:\/\/fonts\.(?:googleapis|gstatic)\.com/);
   const fontPaths = [...css.matchAll(/url\(\/([^)]*\.woff2)\)/g)].map(match => match[1]);
-  assert.equal(fontPaths.length, 8);
+  assert.equal(fontPaths.length, 6);
   const assets = offlineAssetList({}, '/typing/', publicFiles);
   for (const file of fontPaths) {
     const data = await readFile(new URL(`../public/${file}`, import.meta.url));
@@ -67,6 +67,10 @@ test('every self-hosted font is packaged and precached without caching host conf
     assert.ok(assets.includes(`/typing/${file}`), `${file} is available offline`);
   }
   assert.ok(publicFiles.every(file => !file.startsWith('fonts/') || /\.woff2$/.test(file)));
+  for (const logo of ['sunaissu.svg', 'sunaissu-light.svg', 'sunaissu-dark.svg', 'bg-light.svg', 'bg-dark.svg']) {
+    assert.ok(publicFiles.includes(`brand/${logo}`), `${logo} is available offline`);
+    assert.match(await readFile(new URL(`../public/brand/${logo}`, import.meta.url), 'utf8'), /<path/);
+  }
   assert.ok(!publicFiles.some(file => /(?:_headers|_redirects|\.txt$)/.test(file)));
 });
 
