@@ -4,14 +4,14 @@ Updated October 25, 2026.
 
 Typedo should help someone learn the keyboard, see their improvement, and want to continue a story. The immediate priority is a complete practice flow that works with a keyboard: choose an activity, type, pause, resume, finish, and continue without having to click the text area.
 
-This consolidates the existing README backlog, the engagement review, and the requested UI and UX improvements. Everything below the current capabilities section is proposed work, with no committed release dates. The order is a recommendation, not a delivery promise. The [README](README.md) remains the reference for implemented behavior.
+This consolidates the existing product backlog, the engagement review, and the requested UI and UX improvements. Everything below the current capabilities section is proposed work, with no committed release dates. The order is a recommendation, not a delivery promise.
 
 ## Current capabilities and gaps
 
 Typedo already has 12 guided lessons, optional assessments, adaptive weak-key practice, later reviews, timed and word tests, custom passages, finger guidance, and five original stories with three chapters each. It tracks accuracy, speed, history, session goals, and streaks. Stories save unfinished chapters. Progress stays in the browser and can be exported or restored.
 
 | Area | Current behavior | Opportunity |
-| --- | --- | --- |
+| --- | --- | --- | `
 | Returning visits | Saved practice opens the typing workspace. | Lead with the learner's unfinished activity and a useful next step. |
 | Lesson selection | Selecting a course card starts a round without moving focus to its typing input. | Focus the ready exercise after an intentional selection. |
 | Focus instructions | Some states say to click the text to begin or continue. | Provide a keyboard path and instructions that describe it. |
@@ -215,7 +215,6 @@ Typedo currently has no analytics. Start with local summaries and volunteered fe
 
 ## Source references
 
-- [Current features and original backlog](README.md)
 - [Navigation, free-typing focus, shortcuts, and progress](src/App.jsx)
 - [Lesson selection, practice, and results](src/Lessons.jsx)
 - [Story drafts, pause handling, and focus restoration](src/Stories.jsx)

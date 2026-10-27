@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Download, RefreshCw, WifiOff } from 'lucide-react';
 import { appWorker, removeOfflineDownload, workerMessage } from './offline.js';
 
-// Keep this panel on Home: updates are a deliberate action between exercises.
 export default function OfflineStatus() {
   const production = import.meta.env.PROD;
   const [status, setStatus] = useState('idle');
