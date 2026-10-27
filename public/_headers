@@ -6,19 +6,22 @@
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'
 
 /
-  Cache-Control: no-cache
+  Cache-Control: public, no-cache, no-transform
 
 /index.html
-  Cache-Control: no-cache
+  Cache-Control: public, no-cache, no-transform
 
 /sw.js
   Cache-Control: no-cache
 
 /guide.html
-  Cache-Control: no-cache
+  Cache-Control: public, no-cache, no-transform
 
 /privacy.html
-  Cache-Control: no-cache
+  Cache-Control: public, no-cache, no-transform
 
 /support.html
-  Cache-Control: no-cache
+  Cache-Control: public, no-cache, no-transform
+
+/404.html
+  Cache-Control: public, no-cache, no-transform
