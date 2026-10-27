@@ -47,7 +47,7 @@
 .app-shell .focus-prompt { pointer-events: none; }
 .app-shell .focus-prompt button { pointer-events: auto; }
 .app-shell.hide-live-stats .live-metrics > span:not(.timer),
-.app-shell.hide-live-stats .lesson-live-stats > span:not(:last-child) { visibility: hidden; }
+.app-shell.hide-live-stats .lesson-live-metrics > span:not(:last-child) { visibility: hidden; }
 .app-shell.focus-mode .sidebar { opacity: 1; }
 .app-shell.focus-mode .bottom-stats, .app-shell.focus-mode .lesson-entry, .app-shell.focus-mode .intro { display: none; }
 .app-shell.focus-mode .workspace-controls { margin-top: 0; }
