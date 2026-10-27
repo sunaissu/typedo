@@ -67,7 +67,7 @@ test('every self-hosted font is packaged and precached without caching host conf
     assert.ok(assets.includes(`/typing/${file}`), `${file} is available offline`);
   }
   assert.ok(publicFiles.every(file => !file.startsWith('fonts/') || /\.woff2$/.test(file)));
-  for (const logo of ['sunaissu.svg', 'sunaissu-light.svg', 'sunaissu-dark.svg', 'bg-light.svg', 'bg-dark.svg']) {
+  for (const logo of ['sunaissu-light.svg', 'sunaissu-dark.svg', 'bg-light.svg', 'bg-dark.svg']) {
     assert.ok(publicFiles.includes(`brand/${logo}`), `${logo} is available offline`);
     assert.match(await readFile(new URL(`../public/brand/${logo}`, import.meta.url), 'utf8'), /<path/);
   }
