@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, Check, Users } from 'lucide-react';
 import App from './App.jsx';
+import LoadingScreen from './LoadingScreen.jsx';
 import { Dialog } from './SessionControls.jsx';
 import { MAX_PROFILES, addProfile, profileStorageKey, readProfiles, renameProfile, writeProfiles } from './profiles.js';
 import './profiles.css';
@@ -13,7 +14,7 @@ export default function ProfilesApp({ Application = App, storage = browserStorag
     readProfiles(storage).then(value => { if (active) setInitial(value); });
     return () => { active = false; };
   }, [storage]);
-  if (!initial) return <main className="storage-loading" role="status">Loading your profiles…</main>;
+  if (!initial) return <LoadingScreen message="Loading your profiles…" />;
   return <ProfilesWorkspace Application={Application} storage={storage} initial={initial} />;
 }
 

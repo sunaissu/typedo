@@ -1,4 +1,5 @@
 import { SunaissuMark } from './BrandMarks.jsx';
+import LoadingScreen from './LoadingScreen.jsx';
 import { useEffect, useRef, useState } from 'react';
 import { Activity, ArrowDownToLine, ArrowLeft, ArrowRight, ArrowUpRight, Award, BarChart3, BookOpen, CircleHelp, Clock3, Code2, Flame, Hand, House, Keyboard as KeyboardIcon, Leaf, Moon, RotateCcw, Settings2, ShieldCheck, Sparkles, Sun, Target, Type, Upload, Volume2, VolumeX, X } from 'lucide-react';
 import Keyboard from './Keyboard.jsx';
@@ -40,7 +41,7 @@ function LoadProfile({ storageKey = STORAGE_KEY, storage = browserStorage, ...pr
     readProgress(storage, storageKey).then(value => { if (active) setInitial(value); });
     return () => { active = false; };
   }, [storage, storageKey, reloadVersion]);
-  if (!initial) return <main className="storage-loading" role="status">Loading your progress…</main>;
+  if (!initial) return <LoadingScreen message="Loading your progress…" />;
   return <Workspace key={reloadVersion} {...props} storageKey={storageKey} storage={storage} initial={initial} onReload={() => { setInitial(null); setReloadVersion(value => value + 1); }} />;
 }
 

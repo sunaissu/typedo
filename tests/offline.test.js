@@ -49,7 +49,7 @@ function workerFixture({ version = 'test-build', failInstall = false, windows = 
 
 test('precache lists only local built files, excludes source maps, and respects deployment base', () => {
   const files = offlineAssetList({ 'assets/app-123.js': {}, 'assets/app-456.css': {}, 'assets/app-123.js.map': {}, 'index.html': {} }, '/typing/');
-  assert.deepEqual(files, ['/typing/app-icon.svg', '/typing/assets/app-123.js', '/typing/assets/app-456.css', '/typing/favicon.svg', '/typing/index.html', '/typing/manifest.webmanifest']);
+  assert.deepEqual(files, ['/typing/app-icon.svg', '/typing/assets/app-123.js', '/typing/assets/app-456.css', '/typing/favicon.svg', '/typing/index.html', '/typing/manifest.webmanifest', '/typing/startup.css']);
   assert.equal(new Set(files).size, files.length);
   assert.ok(files.every(file => !file.includes('http') && !file.endsWith('.map')));
 });
@@ -72,6 +72,7 @@ test('every self-hosted font is packaged and precached without caching host conf
     assert.match(await readFile(new URL(`../public/brand/${logo}`, import.meta.url), 'utf8'), /<path/);
   }
   assert.ok(!publicFiles.some(file => /(?:_headers|_redirects|\.txt$)/.test(file)));
+  assert.ok(publicFiles.includes('startup.css'), 'Startup layout must also work offline');
 });
 
 test('installation downloads public files without credentials and waits for deliberate update activation', async () => {

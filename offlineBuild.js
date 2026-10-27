@@ -3,7 +3,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 export const OFFLINE_CACHE_PREFIX = 'typedo-offline-';
-export const OFFLINE_PUBLIC_FILES = ['favicon.svg', 'app-icon.svg', 'manifest.webmanifest'];
+export const OFFLINE_PUBLIC_FILES = ['favicon.svg', 'app-icon.svg', 'manifest.webmanifest', 'startup.css'];
 
 export function offlinePublicFiles(publicDir) {
   const assets = [];

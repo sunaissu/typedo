@@ -15,14 +15,17 @@
     <meta name="twitter:title" content="Typedo | Typing Speed Tests and Practice" />
     <meta name="twitter:description" content="Practice with typing tests, guided lessons, and stories. Your progress stays in your browser." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/startup.css" />
   </head>
   <body>
     <div id="root">
-      <main>
-        <h1>Typedo: typing speed tests and practice</h1>
-        <p>Practice typing with quick tests, guided lessons, and stories. Track your typing speed and accuracy as you learn.</p>
-        <p>Your profiles and progress are saved in this browser. Export a backup to move your progress to another device.</p>
-        <noscript><p>Enable JavaScript to open the typing workspace.</p></noscript>
+      <main class="storage-loading">
+        <div class="loading-content">
+          <div class="loading-brand"><span class="loading-mark" aria-hidden="true">t<span></span></span><h1>Typedo<span>.</span></h1></div>
+          <p class="loading-description">Typing tests, lessons and stories.</p>
+          <p class="loading-message" role="status">Your practice space is opening.</p>
+          <noscript><p>Enable JavaScript to open the typing workspace, or read the <a href="./guide.html">practice guide</a>.</p></noscript>
+        </div>
       </main>
     </div>
     <script type="module" src="/src/main.jsx"></script>
