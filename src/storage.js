@@ -8,7 +8,7 @@ import { sanitizeSavedPassages } from './practiceLibrary.js';
 import { browserStorage } from './browserStorage.js';
 
 export const STORAGE_KEY = 'typedo:v1';
-export const DEFAULT_SETTINGS = { startView: 'start', mode: 'time', duration: 30, wordCount: 25, lesson: 'home', lessonTheme: 'everyday', lessonLength: 'standard', punctuation: false, numbers: false, strict: true, guide: true, sound: false, theme: 'dark', themeRevision: 2, goal: 5, dailyMinutes: 5, weeklyDays: 3, passageSize: 28, lineHeight: 1.9, showLiveStats: true, customText: 'Keep your eyes on the screen. Place your fingers on the home row and type each word carefully.' };
+export const DEFAULT_SETTINGS = { startView: 'start', mode: 'time', duration: 30, wordCount: 25, lesson: 'home', lessonTheme: 'everyday', lessonLength: 'standard', punctuation: false, capitalization: false, symbols: false, numbers: false, strict: true, guide: true, sound: false, theme: 'dark', themeRevision: 2, goal: 5, dailyMinutes: 5, weeklyDays: 3, passageSize: 28, lineHeight: 1.9, showLiveStats: true, customText: 'Keep your eyes on the screen. Place your fingers on the home row and type each word carefully.' };
 export const emptyProgress = () => ({ version: 1, settings: { ...DEFAULT_SETTINGS }, history: [], keyStats: {}, lessonProgress: {}, lessonLearning: {}, storyProgress: {}, storyDrafts: {}, lessonDrafts: {}, workspaceDrafts: {}, savedPassages: [] });
 const finite = value => typeof value === 'number' && Number.isFinite(value) && value >= 0;
 export function discardedDraftsNotice(raw, cleaned) {
@@ -20,10 +20,11 @@ export function validateProgress(value) {
   const settings = { ...DEFAULT_SETTINGS };
   const raw = value.settings || {};
   if (['start', 'type'].includes(raw.startView)) settings.startView = raw.startView;
-  for (const key of ['punctuation', 'numbers', 'strict', 'guide', 'sound', 'showLiveStats']) if (typeof raw[key] === 'boolean') settings[key] = raw[key];
+  for (const key of ['punctuation', 'capitalization', 'symbols', 'numbers', 'strict', 'guide', 'sound', 'showLiveStats']) if (typeof raw[key] === 'boolean') settings[key] = raw[key];
+  if (typeof raw.capitalization !== 'boolean') settings.capitalization = raw.punctuation === true;
   if (['time', 'words', 'practice', 'custom'].includes(raw.mode)) settings.mode = raw.mode;
-  if ([15, 30, 60, 120].includes(raw.duration)) settings.duration = raw.duration;
-  if ([10, 25, 50, 100].includes(raw.wordCount)) settings.wordCount = raw.wordCount;
+  if (Number.isInteger(raw.duration) && raw.duration >= 15 && raw.duration <= 900) settings.duration = raw.duration;
+  if (Number.isInteger(raw.wordCount) && raw.wordCount >= 10 && raw.wordCount <= 1000) settings.wordCount = raw.wordCount;
   if (['home', 'top', 'bottom', 'all', 'weak'].includes(raw.lesson)) settings.lesson = raw.lesson;
   if (['everyday', 'outdoors', 'adventure'].includes(raw.lessonTheme)) settings.lessonTheme = raw.lessonTheme;
   if (['quick', 'standard', 'extra'].includes(raw.lessonLength)) settings.lessonLength = raw.lessonLength;

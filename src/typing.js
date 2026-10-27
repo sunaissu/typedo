@@ -59,8 +59,9 @@ export function generateText(config, stats = {}, random = Math.random, previousT
   const words = Array.from({ length: count }, (_, i) => {
     let word = pick(WORDS);
     if (config.numbers && i % 8 === 6) word = String(Math.floor(random() * 900) + 100);
+    if ((config.capitalization ?? config.punctuation) && i % 9 === 0) word = word[0].toUpperCase() + word.slice(1);
+    if (config.symbols && i % 7 === 4) word += pick(['@', '#', '$', '%', '&', '*', '+', '=']);
     if (config.punctuation) {
-      if (i % 9 === 0) word = word[0].toUpperCase() + word.slice(1);
       if (i % 9 === 8) word += '.';
       else if (i % 5 === 3) word += ',';
     }

@@ -5,16 +5,16 @@ function passageKey(text = '') {
   for (const char of text.trim().replace(/\s+/g, ' ')) hash = BigInt.asUintN(64, (hash ^ BigInt(char.charCodeAt(0))) * 1099511628211n);
   return hash.toString(16);
 }
-export const workspaceKey = config => `${config.mode}:${config.mode === 'time' ? config.duration : config.mode === 'words' ? config.wordCount : config.mode === 'practice' ? config.lesson : passageKey(config.customText)}:${config.punctuation}:${config.numbers}:${config.mode === 'practice' && config.strict}`;
+export const workspaceKey = config => `${config.mode}:${config.mode === 'time' ? config.duration : config.mode === 'words' ? config.wordCount : config.mode === 'practice' ? config.lesson : passageKey(config.customText)}:${config.punctuation}:${config.numbers}:${config.mode === 'practice' && config.strict}${(config.capitalization ?? config.punctuation) !== config.punctuation || config.symbols ? `:case=${config.capitalization ?? config.punctuation}:symbols=${!!config.symbols}` : ''}`;
 const counter = value => Number.isSafeInteger(value) && value >= 0;
 const record = value => value && typeof value === 'object' && !Array.isArray(value);
 
 export function cleanWorkspaceConfig(value) {
   if (!record(value) || !['time', 'words', 'practice', 'custom'].includes(value.mode)) return null;
-  if (![15, 30, 60, 120].includes(value.duration) || ![10, 25, 50, 100].includes(value.wordCount)) return null;
+  if (!Number.isInteger(value.duration) || value.duration < 15 || value.duration > 900 || !Number.isInteger(value.wordCount) || value.wordCount < 10 || value.wordCount > 1000) return null;
   if (!['home', 'top', 'bottom', 'all', 'weak'].includes(value.lesson)) return null;
   return { mode: value.mode, duration: value.duration, wordCount: value.wordCount, lesson: value.lesson,
-    punctuation: value.punctuation === true, numbers: value.numbers === true, strict: value.strict !== false,
+    capitalization: typeof value.capitalization === 'boolean' ? value.capitalization : value.punctuation === true, symbols: value.symbols === true, punctuation: value.punctuation === true, numbers: value.numbers === true, strict: value.strict !== false,
     customText: typeof value.customText === 'string' ? value.customText.replace(/[^\x20-\x7e\n\r\t]/g, '').slice(0, 1500) : '' };
 }
 

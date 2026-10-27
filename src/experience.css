@@ -86,3 +86,21 @@
   .app-shell .typing-topline { flex-wrap: wrap; gap: 10px; }
   .app-shell .sidebar .library-nav { margin: 0; }
 }
+
+.app-shell .session-setup { margin: 18px 0; padding: 0; }
+.app-shell .setup-heading { cursor: pointer; padding: 16px; margin: 0; letter-spacing: 0; font: inherit; flex-wrap: wrap; color: var(--text); }
+.setup-heading strong { font-size: 14px; }
+.setup-heading > span { color: var(--muted); font-size: 12px; margin-left: auto; line-height: 1.6; }
+.app-shell .setup-fields { padding: 8px 16px 0; align-items: start; }
+.app-shell .session-setup > .panel-note { padding: 0 16px 16px; }
+.setup-field label { display: grid; gap: 8px; }
+.setup-field input { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--border); border-radius: 6px; padding: 9px; background: var(--key-bg); color: var(--text); font: inherit; }
+.custom-target { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 8px; }
+.custom-target small { grid-column: 1 / -1; color: var(--muted); line-height: 1.6; }
+.custom-target [role=alert] { color: var(--error); }
+.app-shell .setup-options { flex-wrap: wrap; gap: 8px 16px; }
+.app-shell.focus-mode .session-setup { display: none; }
+@media (max-width: 600px) {
+  .setup-heading > span { width: 100%; margin-left: 24px; }
+  .app-shell .setup-fields { grid-template-columns: 1fr; }
+}
