@@ -23,5 +23,8 @@
 /support.html
   Cache-Control: public, no-cache, no-transform
 
+/about.html
+  Cache-Control: public, no-cache, no-transform
+
 /404.html
   Cache-Control: public, no-cache, no-transform

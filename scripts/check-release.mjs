@@ -11,7 +11,7 @@ const walk = dir => readdirSync(dir).flatMap(name => {
   const file = resolve(dir, name);
   return statSync(file).isDirectory() ? walk(file) : [file];
 });
-for (const route of ['/', '/guide.html', '/privacy.html', '/support.html']) {
+for (const route of ['/', '/guide.html', '/privacy.html', '/support.html', '/about.html']) {
   const html = read(route === '/' ? 'index.html' : route.slice(1));
   assert.ok(html.includes(`href="${origin}${route}"`), `Wrong or missing canonical: ${route}`);
   assert.ok(html.includes('content="index,follow"'), `Page remains noindex: ${route}`);

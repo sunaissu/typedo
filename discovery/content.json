@@ -59,6 +59,31 @@
         { "heading": "Keyboard and offline help", "paragraphs": ["Typing practice requires a physical keyboard and printable English keyboard characters. Touch navigation works on smaller screens. To practise offline, complete the app's offline download while connected, then keep using the same browser and site address."] },
         { "heading": "Who makes Typedo?", "paragraphs": ["Typedo is made by Sunaissu. This release uses GitHub issues for support and feedback."] }
       ]
+    },
+    {
+      "path": "/about.html",
+      "title": "About Typedo | Sunaissu",
+      "description": "Typing practice at your own pace, made by Sunaissu.",
+      "sections": [
+        {
+          "heading": "A little practice, every day",
+          "paragraphs": [
+            "Typedo brings typing tests, guided lessons and stories into one place. Choose what you want to practise, then track your progress over time."
+          ]
+        },
+        {
+          "heading": "Made by Sunaissu",
+          "paragraphs": [
+            "Sunaissu is the name behind Typedo. The bg_ mark below is the creator signature."
+          ]
+        },
+        {
+          "heading": "Your practice stays yours",
+          "paragraphs": [
+            "Progress is stored in this browser. Export a backup before moving to another device or domain. Visit Help & feedback to report a problem or suggest an improvement."
+          ]
+        }
+      ]
     }
   ]
 }

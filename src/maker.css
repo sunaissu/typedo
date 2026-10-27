@@ -2,8 +2,7 @@
 .app-shell > footer > div { flex-wrap: wrap; gap: 12px 18px; }
 .app-shell > footer a, .app-shell > footer button { min-height: 36px; display: inline-flex; align-items: center; font-size: 12px; }
 .maker-credit { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); }
-.maker-logo { display: block; width: 87px; height: 28px; object-fit: contain; }
-.maker-signature { display: block; width: 24px; height: 14px; object-fit: contain; opacity: .65; }
+.maker-logo { display: block; width: 87px; height: 28px; color: var(--text); }
 @media (max-width: 700px) {
   .app-shell > footer { align-items: flex-start; }
   .app-shell > footer > div { align-items: flex-start; gap: 6px 16px; }
